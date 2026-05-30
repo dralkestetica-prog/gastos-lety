@@ -74,13 +74,14 @@ export default function ResumenView() {
           installments_paid: pagadasPorInst[c.id] || 0,
         }))
 
-        // Sincronizar con DB si el valor cambió
-        for (const c of cuotasActualizadas) {
-          const original = instData.find(i => i.id === c.id)
-          if (original && original.installments_paid !== c.installments_paid) {
-            await supabase.from('installments').update({ installments_paid: c.installments_paid }).eq('id', c.id)
-          }
-        }
+        // Sincronizar con DB solo los que cambiaron (evita writes innecesarios)
+        const cambiados = cuotasActualizadas.filter(c => {
+          const orig = instData.find(i => i.id === c.id)
+          return orig && orig.installments_paid !== c.installments_paid
+        })
+        await Promise.all(cambiados.map(c =>
+          supabase.from('installments').update({ installments_paid: c.installments_paid }).eq('id', c.id)
+        ))
 
         setCuotas(cuotasActualizadas.filter(c => c.installments_paid < c.total_installments))
       } else {

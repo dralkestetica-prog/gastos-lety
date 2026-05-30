@@ -31,17 +31,17 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
       setForm({ ...EMPTY, date: format(new Date(), 'yyyy-MM-dd') })
       return
     }
-    if (editData) {
-      setForm({
+    // Normalizar null a '' para que los selects funcionen correctamente
+    setForm({
         type: editData.type || 'expense',
         description: editData.description || '',
         date: editData.date || HOY,
         amount_ars: editData.amount_ars || '',
         amount_usd: editData.amount_usd || '',
-        category_id: editData.category_id || '',
-        account_id: editData.account_id || '',
-        card_id: editData.card_id || '',
-        cuotas: editData.installment_id ? '' : 1,
+        category_id: editData.category_id ?? '',
+        account_id: editData.account_id ?? '',
+        card_id: editData.card_id ?? '',
+        cuotas: editData.installment_id ? 1 : 1,
         notes: editData.notes || '',
       })
     }
@@ -110,8 +110,9 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
         if (instErr) throw instErr
 
         const txns = Array.from({ length: cuotas }, (_, i) => {
-          const d = new Date(form.date)
-          d.setMonth(d.getMonth() + i)
+          // Usar año/mes base para evitar desborde de días (ej: 31 ene + 1 mes = 3 mar)
+          const base = new Date(form.date)
+          const d = new Date(base.getFullYear(), base.getMonth() + i, 1)
           return {
             type: 'expense',
             description: `${payload.description} (${i + 1}/${cuotas})`,

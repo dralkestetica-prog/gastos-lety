@@ -60,7 +60,7 @@ export default function BuscadorView({ categories, accounts, cards }) {
             className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-10 py-3 text-sm focus:outline-none focus:border-brand-400"
             placeholder="Buscar por descripción..."
             value={query}
-            onChange={e => { setQuery(e.target.value); buscar(e.target.value) }}
+            onChange={e => { const v = e.target.value; setQuery(v); buscar(v, catFiltro, montoMin, montoMax, desde, hasta) }}
           />
           {query && (
             <button onClick={limpiar} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">

@@ -92,7 +92,8 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
         if (data?.value?.usd_ars) setDolar(data.value.usd_ars)
         // Auto-actualizar si el dato tiene más de 1 hora
         const updated = data?.value?.updated_at
-        const stale = !updated || (new Date() - new Date(updated)) > 3600000
+        const updatedMs = updated ? new Date(updated).getTime() : 0
+        const stale = !updatedMs || isNaN(updatedMs) || (Date.now() - updatedMs) > 3600000
         if (stale) actualizarDolar()
       })
   }, [])
@@ -199,7 +200,7 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
     }
     const cfg = bancoConfig[importBanco] || bancoConfig.mp
     const cuenta = accounts.find(cfg.buscar) || accounts[0]
-    const catOtros = categories?.find(c => c.name === 'Otros')
+    const catOtros = categories?.find(c => c.name?.toLowerCase().includes('otro'))
 
     const txns = []
     for (let i = 1; i < lines.length; i++) {
@@ -322,9 +323,9 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
           const totalARS = accounts
             .filter(a => a.currency !== 'USD')
             .reduce((s, a) => s + (balances[a.id]?.ars || 0), 0)
-          const totalUSDenARS = accounts
-            .filter(a => a.currency === 'USD')
-            .reduce((s, a) => s + (balances[a.id]?.usd || 0) * (dolar || 0), 0)
+          const totalUSDenARS = dolar
+            ? accounts.filter(a => a.currency === 'USD').reduce((s, a) => s + (balances[a.id]?.usd || 0) * dolar, 0)
+            : 0
           const patrimonio = totalARS + totalUSDenARS
           return (
             <div className="bg-gradient-to-r from-brand-600 to-pink-500 rounded-2xl shadow-sm p-4 mb-4 text-white">
