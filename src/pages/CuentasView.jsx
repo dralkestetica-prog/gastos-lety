@@ -23,6 +23,7 @@ export default function CuentasView({ accounts, cards, categories }) {
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
   const [importBanco, setImportBanco] = useState('mp')
+  const [modalPago, setModalPago] = useState(null) // { card, total, ids }
 
   async function cargarTxns() {
     const { data: txns } = await supabase
@@ -96,18 +97,16 @@ export default function CuentasView({ accounts, cards, categories }) {
       })
   }, [])
 
-  async function pagarTarjeta(card) {
+  function pagarTarjeta(card) {
     const ids = cardTxIds[card.id]
     const total = cardTotals[card.id]
     if (!ids?.length) return
+    setModalPago({ card, total, ids })
+  }
 
-    // Elegir cuenta de débito para el pago
-    const opcionesCuentas = accounts.map((a, i) => `${i + 1}. ${a.name}`).join('\n')
-    const eleccion = prompt(`¿Desde qué cuenta pagás ${card.name}?\nTotal: ${fmtARS(total)}\n\n${opcionesCuentas}\n\nIngresá el número:`)
-    if (!eleccion) return
-    const idx = parseInt(eleccion) - 1
-    const cuentaPago = accounts[idx] || accounts[0]
-
+  async function confirmarPago(cuentaPago) {
+    const { card, total, ids } = modalPago
+    setModalPago(null)
     setPagando(card.id)
     await supabase.from('transactions').update({ is_paid: true }).in('id', ids)
     await supabase.from('transactions').insert({
@@ -390,6 +389,35 @@ export default function CuentasView({ accounts, cards, categories }) {
           })}
         </div>
       </div>
+
+      {/* Modal pagar tarjeta */}
+      {modalPago && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setModalPago(null)}>
+          <div className="bg-white w-full max-w-md rounded-t-2xl p-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-bold text-gray-800">Pagar {modalPago.card.name}</h2>
+              <button onClick={() => setModalPago(null)}><X size={20} className="text-gray-400" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Total a pagar: <span className="font-bold text-red-500">{fmtARS(modalPago.total)}</span>
+            </p>
+            <p className="text-xs text-gray-500 font-medium mb-2">¿Desde qué cuenta?</p>
+            <div className="space-y-2">
+              {accounts.map(a => (
+                <button key={a.id} onClick={() => confirmarPago(a)}
+                  className="w-full flex items-center gap-3 bg-gray-50 hover:bg-brand-50 hover:border-brand-300 border border-gray-200 rounded-xl px-4 py-3 transition-colors">
+                  <span className="text-xl">{TIPO_ICON[a.type] || '💳'}</span>
+                  <div className="flex-1 text-left">
+                    <p className="font-semibold text-gray-800 text-sm">{a.name}</p>
+                    <p className="text-xs text-gray-400">{fmtARS(balances[a.id]?.ars || 0)} disponible</p>
+                  </div>
+                  <CheckCircle size={18} className="text-gray-300" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal importar CSV */}
       {modalImport && (

@@ -152,7 +152,9 @@ export default function BuscadorView({ categories, accounts, cards }) {
                     <p className="text-xs text-gray-400 mt-0.5 truncate">
                       {m.categories?.icon} {m.categories?.name || ''}
                       {medio ? ` · ${medio}` : ''}
+                      {m.notes ? ` · 📝` : ''}
                     </p>
+                    {m.notes && <p className="text-xs text-gray-400 mt-0.5 truncate italic">{m.notes}</p>}
                   </div>
                   <div className="text-right shrink-0">
                     <p className={`font-bold text-sm ${m.type === 'income' ? 'text-green-600' : 'text-gray-800'}`}>

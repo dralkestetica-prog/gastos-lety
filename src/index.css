@@ -51,6 +51,30 @@ button {
   border-color: #334155 !important;
 }
 
+/* Modales bottom-sheet */
+.dark .rounded-t-2xl {
+  background-color: #1e293b !important;
+}
+
+/* Optgroup en selects */
+.dark optgroup,
+.dark option {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+}
+
+/* Botones secundarios */
+.dark .bg-gray-50  { background-color: #0f172a !important; }
+.dark .hover\:bg-gray-50:hover { background-color: #1e293b !important; }
+.dark .hover\:bg-gray-100:hover { background-color: #334155 !important; }
+.dark .hover\:bg-gray-200:hover { background-color: #475569 !important; }
+
+/* Tablas */
+.dark .border-b { border-color: #334155 !important; }
+
+/* Progress bars background */
+.dark .bg-gray-100 { background-color: #334155 !important; }
+
 /* ===== PDF / PRINT ===== */
 @media print {
   .no-print,
