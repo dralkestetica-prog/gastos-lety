@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { fmtARS, fmtUSD } from '../lib/formato'
 import { format } from 'date-fns'
@@ -37,16 +37,6 @@ export default function MesView({ categories, accounts, cards }) {
   useEffect(() => { cargar() }, [mes, refresh])
 
   const cambiarMes = (d) => setMes((m) => new Date(m.getFullYear(), m.getMonth() + d, 1))
-
-  // Swipe para cambiar mes
-  const touchStart = useRef(null)
-  function onTouchStart(e) { touchStart.current = e.touches[0].clientX }
-  function onTouchEnd(e) {
-    if (touchStart.current === null) return
-    const diff = touchStart.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) > 50) cambiarMes(diff > 0 ? 1 : -1)
-    touchStart.current = null
-  }
 
   function exportarPDF() {
     window.print()
@@ -103,7 +93,7 @@ export default function MesView({ categories, accounts, cards }) {
   }, [movs])
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div className="min-h-screen bg-gray-50 pb-24">
       <div className="max-w-md mx-auto p-4">
 
         {/* Header mes */}
