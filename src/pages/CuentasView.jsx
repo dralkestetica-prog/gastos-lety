@@ -84,15 +84,29 @@ export default function CuentasView({ accounts, cards, categories }) {
 
   useEffect(() => {
     cargarTxns()
+    // Cargar cotización guardada primero, luego intentar actualizar
     supabase.from('app_config').select('value').eq('key', 'exchange_rate').single()
-      .then(({ data }) => { if (data?.value?.usd_ars) setDolar(data.value.usd_ars) })
+      .then(({ data }) => {
+        if (data?.value?.usd_ars) setDolar(data.value.usd_ars)
+        // Auto-actualizar si el dato tiene más de 1 hora
+        const updated = data?.value?.updated_at
+        const stale = !updated || (new Date() - new Date(updated)) > 3600000
+        if (stale) actualizarDolar()
+      })
   }, [])
 
   async function pagarTarjeta(card) {
     const ids = cardTxIds[card.id]
     const total = cardTotals[card.id]
     if (!ids?.length) return
-    if (!confirm(`¿Marcar ${card.name} como pagada?\nTotal: ${fmtARS(total)}`)) return
+
+    // Elegir cuenta de débito para el pago
+    const opcionesCuentas = accounts.map((a, i) => `${i + 1}. ${a.name}`).join('\n')
+    const eleccion = prompt(`¿Desde qué cuenta pagás ${card.name}?\nTotal: ${fmtARS(total)}\n\n${opcionesCuentas}\n\nIngresá el número:`)
+    if (!eleccion) return
+    const idx = parseInt(eleccion) - 1
+    const cuentaPago = accounts[idx] || accounts[0]
+
     setPagando(card.id)
     await supabase.from('transactions').update({ is_paid: true }).in('id', ids)
     await supabase.from('transactions').insert({
@@ -102,7 +116,7 @@ export default function CuentasView({ accounts, cards, categories }) {
       amount_ars: total,
       amount_usd: 0,
       category_id: null,
-      account_id: accounts[0]?.id || null,
+      account_id: cuentaPago.id,
       card_id: null,
       is_paid: true,
     })

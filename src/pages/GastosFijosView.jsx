@@ -48,6 +48,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   async function marcarPagado(fijo) {
     if (pagados.has(fijo.id)) return
     const dia = String(fijo.due_day || 1).padStart(2, '0')
+    if (navigator.vibrate) navigator.vibrate(50)
     await supabase.from('transactions').insert({
       type: 'expense',
       description: fijo.name,

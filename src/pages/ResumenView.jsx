@@ -102,7 +102,7 @@ export default function ResumenView() {
               const esMesActual = i === 5
               return (
                 <div key={d.key} className="flex-1 flex flex-col items-center gap-1">
-                  <p className="text-xs text-gray-400 font-medium">{fmtARS(d.egresos).replace('$', '').replace('.', '')}</p>
+                  <p className="text-xs text-gray-400 font-medium">{(d.egresos/1000).toFixed(0)}k</p>
                   <div className="w-full flex items-end" style={{ height: '72px' }}>
                     <div
                       className={`w-full rounded-t-lg transition-all ${esMesActual ? 'bg-brand-600' : 'bg-gray-200'}`}

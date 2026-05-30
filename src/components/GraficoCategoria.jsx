@@ -76,7 +76,10 @@ export default function GraficoCategoria({ movs }) {
                 style={{ backgroundColor: COLORES[i % COLORES.length] }}
               />
               <span className="text-xs text-gray-600 truncate flex-1">{d.icon} {d.name}</span>
-              <span className="text-xs font-semibold text-gray-800 shrink-0">{d.pct}%</span>
+              <div className="text-right shrink-0">
+                <p className="text-xs font-semibold text-gray-800">{fmtARS(d.value)}</p>
+                <p className="text-xs text-gray-400">{d.pct}%</p>
+              </div>
             </div>
           ))}
         </div>

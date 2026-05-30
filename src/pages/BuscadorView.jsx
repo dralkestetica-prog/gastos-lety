@@ -8,30 +8,40 @@ import ModalGasto from '../components/ModalGasto'
 
 export default function BuscadorView({ categories, accounts, cards }) {
   const [query, setQuery] = useState('')
+  const [catFiltro, setCatFiltro] = useState('')
+  const [montoMin, setMontoMin] = useState('')
+  const [montoMax, setMontoMax] = useState('')
   const [resultados, setResultados] = useState([])
   const [buscando, setBuscando] = useState(false)
   const [buscado, setBuscado] = useState(false)
   const [modal, setModal] = useState(null)
-  const [refresh, setRefresh] = useState(0)
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
 
-  async function buscar(q) {
-    if (!q.trim()) { setResultados([]); setBuscado(false); return }
+  async function buscar(q = query, cat = catFiltro, min = montoMin, max = montoMax) {
+    const hayFiltro = q.trim() || cat || min || max
+    if (!hayFiltro) { setResultados([]); setBuscado(false); return }
     setBuscando(true)
-    const { data } = await supabase
+
+    let query_sb = supabase
       .from('transactions')
       .select('*, categories(name,icon), accounts!transactions_account_id_fkey(name), cards(name)')
-      .ilike('description', `%${q.trim()}%`)
       .order('date', { ascending: false })
-      .limit(50)
+      .limit(100)
+
+    if (q.trim()) query_sb = query_sb.ilike('description', `%${q.trim()}%`)
+    if (cat) query_sb = query_sb.eq('category_id', cat)
+    if (min) query_sb = query_sb.gte('amount_ars', parseFloat(min))
+    if (max) query_sb = query_sb.lte('amount_ars', parseFloat(max))
+
+    const { data } = await query_sb
     setResultados(data || [])
     setBuscado(true)
     setBuscando(false)
   }
 
   function limpiar() {
-    setQuery('')
-    setResultados([])
-    setBuscado(false)
+    setQuery(''); setCatFiltro(''); setMontoMin(''); setMontoMax('')
+    setResultados([]); setBuscado(false)
   }
 
   return (
@@ -39,14 +49,14 @@ export default function BuscadorView({ categories, accounts, cards }) {
       <div className="max-w-md mx-auto p-4">
         <h1 className="text-xl font-bold text-brand-600 mb-4">Buscar</h1>
 
-        {/* Input */}
-        <div className="relative mb-4">
+        {/* Input principal */}
+        <div className="relative mb-2">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-10 py-3 text-sm focus:outline-none focus:border-brand-400"
             placeholder="Buscar por descripción..."
             value={query}
-            onChange={(e) => { setQuery(e.target.value); buscar(e.target.value) }}
+            onChange={e => { setQuery(e.target.value); buscar(e.target.value) }}
           />
           {query && (
             <button onClick={limpiar} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -55,32 +65,63 @@ export default function BuscadorView({ categories, accounts, cards }) {
           )}
         </div>
 
+        {/* Toggle filtros */}
+        <button
+          onClick={() => setMostrarFiltros(f => !f)}
+          className="text-xs text-brand-600 font-medium mb-3 flex items-center gap-1"
+        >
+          {mostrarFiltros ? '▲ Ocultar filtros' : '▼ Filtrar por categoría o monto'}
+        </button>
+
+        {/* Filtros extra */}
+        {mostrarFiltros && (
+          <div className="bg-white rounded-xl shadow-sm p-3 mb-3 space-y-2">
+            <select
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"
+              value={catFiltro}
+              onChange={e => { setCatFiltro(e.target.value); buscar(query, e.target.value) }}
+            >
+              <option value="">Todas las categorías</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                placeholder="Monto mínimo"
+                value={montoMin}
+                onChange={e => { setMontoMin(e.target.value); buscar(query, catFiltro, e.target.value, montoMax) }}
+              />
+              <input
+                type="number"
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                placeholder="Monto máximo"
+                value={montoMax}
+                onChange={e => { setMontoMax(e.target.value); buscar(query, catFiltro, montoMin, e.target.value) }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Resultados */}
         {buscando && <p className="text-center text-gray-400">Buscando...</p>}
 
         {buscado && !buscando && resultados.length === 0 && (
-          <p className="text-center text-gray-400 mt-8">Sin resultados para "{query}"</p>
+          <p className="text-center text-gray-400 mt-8">Sin resultados</p>
         )}
 
         {resultados.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs text-gray-400 font-medium mb-1">{resultados.length} resultados</p>
-            {resultados.map((m) => {
+            {resultados.map(m => {
               const fechaObj = new Date(m.date + 'T00:00:00')
               const medio = m.cards?.name ? `💳 ${m.cards.name}` : m.accounts?.name || ''
               return (
-                <button
-                  key={m.id}
-                  onClick={() => setModal({ editData: m })}
-                  className="w-full bg-white rounded-xl shadow-sm px-3 py-3 flex items-center gap-3 text-left hover:bg-gray-50"
-                >
+                <button key={m.id} onClick={() => setModal({ editData: m })}
+                  className="w-full bg-white rounded-xl shadow-sm px-3 py-3 flex items-center gap-3 text-left hover:bg-gray-50">
                   <div className="shrink-0 w-10 text-center bg-gray-100 rounded-lg py-1">
-                    <p className="text-sm font-bold text-gray-700 leading-none">
-                      {format(fechaObj, 'd', { locale: es })}
-                    </p>
-                    <p className="text-xs text-gray-400 capitalize">
-                      {format(fechaObj, 'MMM yy', { locale: es })}
-                    </p>
+                    <p className="text-sm font-bold text-gray-700 leading-none">{format(fechaObj, 'd', { locale: es })}</p>
+                    <p className="text-xs text-gray-400 capitalize">{format(fechaObj, 'MMM yy', { locale: es })}</p>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-gray-800 text-sm truncate">{m.description}</p>
@@ -93,9 +134,7 @@ export default function BuscadorView({ categories, accounts, cards }) {
                     <p className={`font-bold text-sm ${m.type === 'income' ? 'text-green-600' : 'text-gray-800'}`}>
                       {m.type === 'income' ? '+' : '-'}{fmtARS(m.amount_ars)}
                     </p>
-                    {Number(m.amount_usd) > 0 && (
-                      <p className="text-xs text-gray-400">{fmtUSD(m.amount_usd)}</p>
-                    )}
+                    {Number(m.amount_usd) > 0 && <p className="text-xs text-gray-400">{fmtUSD(m.amount_usd)}</p>}
                   </div>
                 </button>
               )
@@ -107,7 +146,7 @@ export default function BuscadorView({ categories, accounts, cards }) {
       {modal && (
         <ModalGasto
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); setRefresh(r => r + 1); buscar(query) }}
+          onSaved={() => { setModal(null); buscar() }}
           editData={modal?.editData || null}
           categories={categories}
           accounts={accounts}

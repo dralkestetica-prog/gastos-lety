@@ -24,6 +24,10 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (!editData) {
+      setForm({ ...EMPTY, date: format(new Date(), 'yyyy-MM-dd') })
+      return
+    }
     if (editData) {
       setForm({
         type: editData.type || 'expense',
@@ -130,6 +134,7 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
         if (insErr) throw insErr
       }
 
+      if (navigator.vibrate) navigator.vibrate(50)
       setSaved(true)
       setTimeout(() => onSaved(), 600)
     } catch (e) {

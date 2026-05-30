@@ -229,7 +229,7 @@ export default function MesView({ categories, accounts, cards }) {
       {/* FAB */}
       <button
         onClick={() => setModal('nuevo')}
-        className="fixed bottom-20 right-5 w-14 h-14 bg-brand-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all z-30"
+        className="fixed bottom-24 right-5 w-14 h-14 bg-brand-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all z-30"
       >
         <Plus size={28} />
       </button>
