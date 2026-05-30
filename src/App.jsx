@@ -6,6 +6,7 @@ import CuentasView from './pages/CuentasView'
 import BuscadorView from './pages/BuscadorView'
 import ResumenView from './pages/ResumenView'
 import GastosFijosView from './pages/GastosFijosView'
+import { ConfirmProvider } from './hooks/useConfirm'
 
 export default function App() {
   const [tab, setTab] = useState('mes')
@@ -39,13 +40,20 @@ export default function App() {
   if (!ready) {
     return (
       <div className="min-h-screen bg-brand-600 flex flex-col items-center justify-center gap-4">
-        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-xl">
-          <span className="text-4xl">💰</span>
+        <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-float animate-scaleIn">
+          <span className="text-5xl">💰</span>
         </div>
-        <p className="text-white text-xl font-bold tracking-wide">Gastos Lety</p>
+        <div className="animate-fadeIn" style={{ animationDelay: '0.2s', opacity: 0, animationFillMode: 'forwards' }}>
+          <p className="text-white text-2xl font-bold tracking-tight text-center">Gastos Lety</p>
+          <p className="text-white/60 text-sm text-center mt-1">Finanzas personales</p>
+        </div>
         <div className="flex gap-1.5 mt-2">
-          {[0,1,2].map(i => (
-            <div key={i} className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+          {[0, 1, 2].map(i => (
+            <div
+              key={i}
+              className="w-2 h-2 bg-white/60 rounded-full animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            />
           ))}
         </div>
       </div>
@@ -53,19 +61,34 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {tab === 'mes'     && <MesView         categories={categories} accounts={accounts} cards={cards} />}
-      {tab === 'resumen' && <ResumenView />}
-      {tab === 'fijos'   && <GastosFijosView  categories={categories} accounts={accounts} cards={cards} />}
-      {tab === 'buscar'  && <BuscadorView     categories={categories} accounts={accounts} cards={cards} />}
-      {tab === 'cuentas' && <CuentasView accounts={accounts} cards={cards} categories={categories} />}
-      <NavBar tab={tab} setTab={setTab} />
-      <button
-        onClick={() => setDarkMode(d => !d)}
-        className="fixed top-4 right-4 z-50 w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center text-gray-500 hover:text-brand-600 no-print"
-      >
-        {darkMode ? '☀️' : '🌙'}
-      </button>
-    </div>
+    <ConfirmProvider>
+      <div className="min-h-screen bg-gray-50">
+
+        {/* Contenido con animación al cambiar tab */}
+        <div key={tab} className="animate-tabIn">
+          {tab === 'mes'     && <MesView         categories={categories} accounts={accounts} cards={cards} />}
+          {tab === 'resumen' && <ResumenView />}
+          {tab === 'fijos'   && <GastosFijosView  categories={categories} accounts={accounts} cards={cards} />}
+          {tab === 'buscar'  && <BuscadorView     categories={categories} accounts={accounts} cards={cards} />}
+          {tab === 'cuentas' && <CuentasView      accounts={accounts} cards={cards} categories={categories} />}
+        </div>
+
+        <NavBar tab={tab} setTab={setTab} />
+
+        {/* Toggle dark mode — interruptor animado, siempre visible */}
+        <button
+          onClick={() => setDarkMode(d => !d)}
+          className="fixed top-4 right-4 z-50 no-print flex items-center"
+          aria-label="Modo oscuro"
+        >
+          <div className={`w-12 h-6 rounded-full transition-colors duration-300 flex items-center px-0.5 ${darkMode ? 'bg-brand-600' : 'bg-gray-300'}`}>
+            <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 flex items-center justify-center text-[10px] ${darkMode ? 'translate-x-6' : 'translate-x-0'}`}>
+              {darkMode ? '🌙' : '☀️'}
+            </div>
+          </div>
+        </button>
+
+      </div>
+    </ConfirmProvider>
   )
 }

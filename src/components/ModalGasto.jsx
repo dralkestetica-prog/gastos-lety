@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { format } from 'date-fns'
+import { useConfirm } from '../hooks/useConfirm'
 
 const HOY = format(new Date(), 'yyyy-MM-dd')
 
@@ -23,6 +24,7 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(null)
+  const confirm = useConfirm()
 
   useEffect(() => {
     if (!editData) {
@@ -148,7 +150,13 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
   }
 
   async function eliminar() {
-    if (!confirm('¿Eliminar este movimiento?')) return
+    const ok = await confirm('¿Eliminar este movimiento?', {
+      destructive: true,
+      confirmLabel: 'Eliminar',
+      icon: '🗑️',
+      detail: 'Esta acción no se puede deshacer.',
+    })
+    if (!ok) return
     setSaving(true)
     const { error: e } = await supabase.from('transactions').delete().eq('id', editData.id)
     if (e) { setError(e.message); setSaving(false); return }

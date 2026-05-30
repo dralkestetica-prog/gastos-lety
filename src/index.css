@@ -8,11 +8,20 @@ html, body, #root {
   height: 100%;
   font-family: 'Inter', system-ui, sans-serif;
   background-color: #fafafa;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Scrollbar hide */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Tabular numbers para montos */
+.tabular-nums { font-variant-numeric: tabular-nums; }
 
 /* ===== DARK MODE ===== */
 .dark body,

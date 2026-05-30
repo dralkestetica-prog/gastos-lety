@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fmtARS } from '../lib/formato'
 import { Plus, X, Check, Trash2 } from 'lucide-react'
+import { useConfirm } from '../hooks/useConfirm'
 import { format } from 'date-fns'
 
 function getMesActual() { return format(new Date(), 'yyyy-MM') }
@@ -15,6 +16,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(FORM_VACIO)
   const [saving, setSaving] = useState(false)
+  const confirm = useConfirm()
 
   async function cargar() {
     const MES_ACTUAL = getMesActual()
@@ -96,7 +98,11 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   }
 
   async function eliminar(id) {
-    if (!confirm('¿Eliminar este gasto fijo?')) return
+    const ok = await confirm('¿Eliminar este gasto fijo?', {
+      destructive: true, confirmLabel: 'Eliminar', icon: '🗑️',
+      detail: 'Se desactivará y dejará de aparecer en la lista.',
+    })
+    if (!ok) return
     await supabase.from('fixed_expenses').update({ is_active: false }).eq('id', id)
     setModal(null)
     cargar()

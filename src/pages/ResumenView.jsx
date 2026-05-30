@@ -4,6 +4,8 @@ import { fmtARS } from '../lib/formato'
 import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TrendingUp, TrendingDown, X } from 'lucide-react'
+import { useConfirm } from '../hooks/useConfirm'
+import { SkeletonCard, SkeletonList } from '../components/Skeleton'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 const HOY = new Date()
@@ -19,6 +21,7 @@ export default function ResumenView() {
   const [modalCuota, setModalCuota] = useState(null)
   const [editMonto, setEditMonto] = useState('')
   const [savingCuota, setSavingCuota] = useState(false)
+  const confirm = useConfirm()
 
   useEffect(() => {
     async function cargar() {
@@ -109,7 +112,11 @@ export default function ResumenView() {
   }
 
   async function cancelarCuotas() {
-    if (!confirm('¿Cancelar las cuotas restantes? Se marcarán como inactivas.')) return
+    const ok = await confirm('¿Cancelar cuotas restantes?', {
+      destructive: true, confirmLabel: 'Cancelar cuotas', icon: '✂️',
+      detail: 'Las cuotas que quedan se marcarán como inactivas.',
+    })
+    if (!ok) return
     setSavingCuota(true)
     await supabase.from('installments').update({ is_active: false }).eq('id', modalCuota.id)
     setCuotas(cs => cs.filter(c => c.id !== modalCuota.id))
@@ -117,7 +124,16 @@ export default function ResumenView() {
     setModalCuota(null)
   }
 
-  if (loading) return <p className="text-center text-gray-400 mt-20">Cargando...</p>
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="max-w-md mx-auto p-4 space-y-3">
+        <div className="h-8 w-40 bg-gray-200 rounded-xl animate-pulse" />
+        <SkeletonCard lines={3} />
+        <SkeletonCard lines={4} />
+        <SkeletonCard lines={3} />
+      </div>
+    </div>
+  )
 
   const totalIngresos = datos.reduce((s, m) => s + m.ingresos, 0)
   const totalEgresos = datos.reduce((s, m) => s + m.egresos, 0)
