@@ -172,7 +172,10 @@ export default function BuscadorView({ categories, accounts, cards }) {
       {modal && (
         <ModalGasto
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); buscar() }}
+          onSaved={() => {
+            setModal(null)
+            buscar(query, catFiltro, montoMin, montoMax, desde, hasta)
+          }}
           editData={modal?.editData || null}
           categories={categories}
           accounts={accounts}

@@ -4,7 +4,7 @@ import { fmtARS } from '../lib/formato'
 import { Plus, X, Check, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 
-const MES_ACTUAL = format(new Date(), 'yyyy-MM')
+function getMesActual() { return format(new Date(), 'yyyy-MM') }
 const FORM_VACIO = { name: '', amount_ars: '', category_id: '', account_id: '', card_id: '', due_day: '', tipo: 'expense' }
 
 export default function GastosFijosView({ categories, accounts, cards }) {
@@ -17,6 +17,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   const [saving, setSaving] = useState(false)
 
   async function cargar() {
+    const MES_ACTUAL = getMesActual()
     const [{ data: fijosList }, { data: txPagadas }] = await Promise.all([
       supabase.from('fixed_expenses').select('*, categories(name,icon)').eq('is_active', true).order('due_day'),
       supabase.from('transactions').select('fixed_expense_id').eq('is_fixed', true)
@@ -52,6 +53,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
     if (pagados.has(fijo.id)) return
     const dia = String(fijo.due_day || 1).padStart(2, '0')
     if (navigator.vibrate) navigator.vibrate(50)
+    const MES_ACTUAL = getMesActual()
     await supabase.from('transactions').insert({
       type: fijo.type || 'expense',
       description: fijo.name,

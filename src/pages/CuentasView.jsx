@@ -249,9 +249,22 @@ export default function CuentasView({ accounts, cards, categories }) {
             <button onClick={() => setCuentaDetalle(null)} className="p-2 rounded-full hover:bg-gray-200 text-gray-600">
               <ChevronRight size={22} className="rotate-180" />
             </button>
-            <div>
+            <div className="flex-1">
               <h1 className="text-xl font-bold text-brand-600">{cuentaDetalle.name}</h1>
               <p className="text-xs text-gray-400">Últimos 50 movimientos</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">Saldo</p>
+              {(() => {
+                const b = balances[cuentaDetalle.id] || { ars: 0, usd: 0 }
+                const isUSD = cuentaDetalle.currency === 'USD'
+                const monto = isUSD ? b.usd : b.ars
+                return (
+                  <p className={`text-base font-bold ${monto >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {isUSD ? fmtUSD(monto) : fmtARS(monto)}
+                  </p>
+                )
+              })()}
             </div>
           </div>
 
