@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { fmtARS, fmtUSD } from '../lib/formato'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Plus, Download } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Download, FileText } from 'lucide-react'
 import ModalGasto from '../components/ModalGasto'
 import GraficoCategoria from '../components/GraficoCategoria'
 import Presupuesto from '../components/Presupuesto'
@@ -37,6 +37,10 @@ export default function MesView({ categories, accounts, cards }) {
   useEffect(() => { cargar() }, [mes, refresh])
 
   const cambiarMes = (d) => setMes((m) => new Date(m.getFullYear(), m.getMonth() + d, 1))
+
+  function exportarPDF() {
+    window.print()
+  }
 
   function exportarCSV() {
     const mesLabel = format(mes, 'yyyy-MM')
@@ -107,9 +111,14 @@ export default function MesView({ categories, accounts, cards }) {
 
         {/* Exportar */}
         {movs.length > 0 && (
-          <button onClick={exportarCSV} className="w-full mb-4 flex items-center justify-center gap-2 py-2 bg-white rounded-xl shadow-sm text-xs text-gray-500 font-medium hover:bg-gray-50">
-            <Download size={14} /> Exportar mes a CSV
-          </button>
+          <div className="flex gap-2 mb-4 no-print">
+            <button onClick={exportarCSV} className="flex-1 flex items-center justify-center gap-2 py-2 bg-white rounded-xl shadow-sm text-xs text-gray-500 font-medium hover:bg-gray-50">
+              <Download size={14} /> CSV
+            </button>
+            <button onClick={exportarPDF} className="flex-1 flex items-center justify-center gap-2 py-2 bg-white rounded-xl shadow-sm text-xs text-gray-500 font-medium hover:bg-gray-50">
+              <FileText size={14} /> PDF
+            </button>
+          </div>
         )}
 
         {/* Cards resumen */}

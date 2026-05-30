@@ -13,6 +13,13 @@ export default function App() {
   const [accounts, setAccounts] = useState([])
   const [cards, setCards] = useState([])
   const [ready, setReady] = useState(false)
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
+
+  useEffect(() => {
+    if (darkMode) document.documentElement.classList.add('dark')
+    else document.documentElement.classList.remove('dark')
+    localStorage.setItem('darkMode', darkMode)
+  }, [darkMode])
 
   useEffect(() => {
     async function init() {
@@ -52,7 +59,7 @@ export default function App() {
       {tab === 'fijos'   && <GastosFijosView  categories={categories} accounts={accounts} cards={cards} />}
       {tab === 'buscar'  && <BuscadorView     categories={categories} accounts={accounts} cards={cards} />}
       {tab === 'cuentas' && <CuentasView accounts={accounts} cards={cards} categories={categories} />}
-      <NavBar tab={tab} setTab={setTab} />
+      <NavBar tab={tab} setTab={setTab} darkMode={darkMode} toggleDark={() => setDarkMode(d => !d)} />
     </div>
   )
 }

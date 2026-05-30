@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { fmtARS } from '../lib/formato'
 import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { TrendingUp, TrendingDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, X } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 const HOY = new Date()
@@ -16,6 +16,9 @@ export default function ResumenView() {
   const [datos, setDatos] = useState([])
   const [cuotas, setCuotas] = useState([])
   const [loading, setLoading] = useState(true)
+  const [modalCuota, setModalCuota] = useState(null)
+  const [editMonto, setEditMonto] = useState('')
+  const [savingCuota, setSavingCuota] = useState(false)
 
   useEffect(() => {
     async function cargar() {
@@ -56,6 +59,34 @@ export default function ResumenView() {
     cargar()
   }, [])
 
+  async function guardarCuota() {
+    if (!editMonto || !modalCuota) return
+    setSavingCuota(true)
+    const nuevoMonto = parseFloat(editMonto)
+    await supabase.from('installments').update({ installment_amount_ars: nuevoMonto }).eq('id', modalCuota.id)
+    // Actualizar también las transacciones pendientes de pago de esta cuota
+    const { data: txPendientes } = await supabase
+      .from('transactions')
+      .select('id, date')
+      .eq('installment_id', modalCuota.id)
+      .gte('date', format(new Date(), 'yyyy-MM-01'))
+    if (txPendientes?.length) {
+      await supabase.from('transactions').update({ amount_ars: nuevoMonto }).in('id', txPendientes.map(t => t.id))
+    }
+    setCuotas(cs => cs.map(c => c.id === modalCuota.id ? { ...c, installment_amount_ars: nuevoMonto } : c))
+    setSavingCuota(false)
+    setModalCuota(null)
+  }
+
+  async function cancelarCuotas() {
+    if (!confirm('¿Cancelar las cuotas restantes? Se marcarán como inactivas.')) return
+    setSavingCuota(true)
+    await supabase.from('installments').update({ is_active: false }).eq('id', modalCuota.id)
+    setCuotas(cs => cs.filter(c => c.id !== modalCuota.id))
+    setSavingCuota(false)
+    setModalCuota(null)
+  }
+
   if (loading) return <p className="text-center text-gray-400 mt-20">Cargando...</p>
 
   const totalIngresos = datos.reduce((s, m) => s + m.ingresos, 0)
@@ -70,6 +101,7 @@ export default function ResumenView() {
   const difEgreso = ultimo && anterior ? ultimo.egresos - anterior.egresos : 0
 
   return (
+    <>
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="max-w-md mx-auto p-4">
         <h1 className="text-xl font-bold text-brand-600 mb-5">Resumen general</h1>
@@ -196,20 +228,21 @@ export default function ResumenView() {
                 const totalRestante = restantes * Number(c.installment_amount_ars)
                 const pct = Math.round((c.installments_paid / c.total_installments) * 100)
                 return (
-                  <div key={i}>
+                  <button key={i} onClick={() => { setModalCuota(c); setEditMonto(String(c.installment_amount_ars)) }}
+                    className="w-full text-left hover:bg-gray-50 rounded-xl p-2 -mx-2 transition-colors">
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-gray-700 font-medium truncate max-w-[55%]">{c.description}</span>
-                      <span className="text-gray-500">
-                        {c.installments_paid}/{c.total_installments} · {fmtARS(c.installment_amount_ars)}/mes
+                      <span className="text-brand-600 font-semibold">
+                        {fmtARS(c.installment_amount_ars)}/mes
                       </span>
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full bg-brand-400 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {restantes} cuotas restantes · {fmtARS(totalRestante)} total · 💳 {c.cards?.name}
+                      {c.installments_paid}/{c.total_installments} · {restantes} restantes · {fmtARS(totalRestante)} · 💳 {c.cards?.name}
                     </p>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -218,5 +251,44 @@ export default function ResumenView() {
 
       </div>
     </div>
+
+    {/* Modal editar cuota */}
+    {modalCuota && (
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setModalCuota(null)}>
+        <div className="bg-white w-full max-w-md rounded-t-2xl p-5 pb-8 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-gray-800">Editar cuota</h2>
+            <button onClick={() => setModalCuota(null)}><X size={20} className="text-gray-400" /></button>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-1">{modalCuota.description}</p>
+            <p className="text-xs text-gray-400">💳 {modalCuota.cards?.name} · {modalCuota.installments_paid}/{modalCuota.total_installments} cuotas pagadas</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Monto por cuota (ARS)</label>
+            <input
+              type="number"
+              className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-400"
+              value={editMonto}
+              onChange={e => setEditMonto(e.target.value)}
+            />
+            {editMonto && (
+              <p className="text-xs text-gray-400 mt-1">
+                Total restante estimado: {fmtARS((modalCuota.total_installments - modalCuota.installments_paid) * parseFloat(editMonto || 0))}
+              </p>
+            )}
+          </div>
+          <button onClick={guardarCuota} disabled={savingCuota}
+            className="w-full bg-brand-600 text-white font-semibold py-3 rounded-xl disabled:opacity-50">
+            {savingCuota ? 'Guardando...' : 'Guardar monto'}
+          </button>
+          <button onClick={cancelarCuotas} disabled={savingCuota}
+            className="w-full bg-red-50 text-red-500 font-semibold py-3 rounded-xl text-sm">
+            Cancelar cuotas restantes
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

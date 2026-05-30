@@ -13,3 +13,67 @@ html, body, #root {
 button {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* ===== DARK MODE ===== */
+.dark body,
+.dark #root {
+  background-color: #0f172a;
+}
+
+.dark .bg-gray-50 { background-color: #0f172a !important; }
+.dark .bg-white   { background-color: #1e293b !important; }
+.dark .bg-gray-100 { background-color: #334155 !important; }
+.dark .bg-gray-200 { background-color: #475569 !important; }
+
+.dark .text-gray-800 { color: #f1f5f9 !important; }
+.dark .text-gray-700 { color: #e2e8f0 !important; }
+.dark .text-gray-600 { color: #cbd5e1 !important; }
+.dark .text-gray-500 { color: #94a3b8 !important; }
+.dark .text-gray-400 { color: #64748b !important; }
+
+.dark .border-gray-200 { border-color: #334155 !important; }
+.dark .border-gray-100 { border-color: #1e293b !important; }
+.dark .border-t        { border-color: #334155 !important; }
+
+.dark .shadow-sm  { box-shadow: 0 1px 3px 0 rgba(0,0,0,0.4) !important; }
+.dark .shadow-lg  { box-shadow: 0 8px 24px 0 rgba(0,0,0,0.5) !important; }
+
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+.dark nav.fixed {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* ===== PDF / PRINT ===== */
+@media print {
+  .no-print,
+  nav,
+  button.fixed {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  .dark .bg-white,
+  .dark .bg-gray-50 {
+    background-color: white !important;
+    color: black !important;
+  }
+
+  .max-w-md {
+    max-width: 100% !important;
+  }
+
+  * {
+    box-shadow: none !important;
+  }
+}

@@ -22,6 +22,7 @@ export default function CuentasView({ accounts, cards, categories }) {
   const [modalImport, setModalImport] = useState(false)
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
+  const [importBanco, setImportBanco] = useState('mp')
 
   async function cargarTxns() {
     const { data: txns } = await supabase
@@ -124,70 +125,116 @@ export default function CuentasView({ accounts, cards, categories }) {
     cargarTxns()
   }
 
-  // Importar CSV de Mercado Pago
+  function parsearFecha(raw) {
+    if (!raw) return new Date().toISOString().slice(0, 10)
+    const partes = raw.trim().split(/[\/\-\s]/)[0] ? raw.trim().split(/[\/\-]/) : []
+    if (partes.length >= 3) {
+      if (partes[0].length === 4) return `${partes[0]}-${partes[1].padStart(2,'0')}-${partes[2].slice(0,2).padStart(2,'0')}`
+      return `${partes[2]}-${partes[1].padStart(2,'0')}-${partes[0].padStart(2,'0')}`
+    }
+    return new Date().toISOString().slice(0, 10)
+  }
+
+  function parsearMonto(raw) {
+    if (!raw) return 0
+    const clean = raw.replace(/\s/g, '').replace(/\./g, '').replace(',', '.')
+    return parseFloat(clean) || 0
+  }
+
+  // Importar CSV — soporta MP, Visa, Mastercard, Canadá, Patagonia
   async function importarCSV(e) {
     const file = e.target.files[0]
     if (!file) return
+    e.target.value = ''
     setImportando(true)
     setImportMsg(null)
 
     const text = await file.text()
-    const lines = text.split('\n').filter(l => l.trim())
+    const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim())
     if (lines.length < 2) { setImportMsg('Archivo vacío o inválido'); setImportando(false); return }
 
-    // Detectar separador
     const sep = lines[0].includes(';') ? ';' : ','
     const headers = lines[0].split(sep).map(h => h.replace(/"/g, '').trim().toLowerCase())
 
-    // Buscar columnas relevantes por nombre aproximado
-    const iFecha = headers.findIndex(h => h.includes('fecha'))
-    const iDesc = headers.findIndex(h => h.includes('descripci') || h.includes('detalle') || h.includes('concepto'))
-    const iMonto = headers.findIndex(h => h.includes('monto') || h.includes('importe') || h.includes('total'))
-    const iTipo = headers.findIndex(h => h.includes('tipo') || h.includes('operaci'))
+    // Mapeo de columnas según banco
+    let iFecha = -1, iDesc = -1, iMonto = -1, iCredito = -1, iDebito = -1
 
-    if (iMonto === -1) { setImportMsg('No se encontró columna de monto. Verificá el formato del archivo.'); setImportando(false); return }
+    if (importBanco === 'mp') {
+      iFecha  = headers.findIndex(h => h.includes('fecha'))
+      iDesc   = headers.findIndex(h => h.includes('descripci') || h.includes('detalle') || h.includes('concepto'))
+      iMonto  = headers.findIndex(h => h.includes('monto') || h.includes('importe'))
+    } else if (importBanco === 'visa' || importBanco === 'mastercard') {
+      iFecha  = headers.findIndex(h => h.includes('fecha'))
+      iDesc   = headers.findIndex(h => h.includes('establecimiento') || h.includes('comercio') || h.includes('descripci') || h.includes('detalle'))
+      iMonto  = headers.findIndex(h => h.includes('importe') || h.includes('monto') || h.includes('pesos'))
+    } else if (importBanco === 'canada') {
+      iFecha  = headers.findIndex(h => h.includes('fecha'))
+      iDesc   = headers.findIndex(h => h.includes('descripci') || h.includes('concepto') || h.includes('detalle'))
+      iCredito = headers.findIndex(h => h.includes('cr') || h.includes('crédito') || h.includes('haber'))
+      iDebito  = headers.findIndex(h => h.includes('db') || h.includes('débito') || h.includes('debe'))
+      iMonto  = headers.findIndex(h => h.includes('importe') || h.includes('monto'))
+    } else if (importBanco === 'patagonia') {
+      iFecha  = headers.findIndex(h => h.includes('fecha'))
+      iDesc   = headers.findIndex(h => h.includes('descripci') || h.includes('concepto') || h.includes('movimiento'))
+      iCredito = headers.findIndex(h => h.includes('crédito') || h.includes('haber'))
+      iDebito  = headers.findIndex(h => h.includes('débito') || h.includes('debe'))
+      iMonto  = headers.findIndex(h => h.includes('importe') || h.includes('monto'))
+    }
 
-    // Cuenta MP
-    const mpAccount = accounts.find(a => a.name.toLowerCase().includes('mercado'))
+    // Fallback genérico si no encontró por banco
+    if (iFecha === -1) iFecha = headers.findIndex(h => h.includes('fecha'))
+    if (iDesc  === -1) iDesc  = headers.findIndex(h => h.includes('descripci') || h.includes('detalle') || h.includes('concepto'))
+    if (iMonto === -1) iMonto = headers.findIndex(h => h.includes('monto') || h.includes('importe') || h.includes('total'))
+
+    if (iMonto === -1 && iCredito === -1) {
+      setImportMsg('No se encontró columna de monto. Verificá el formato del archivo.')
+      setImportando(false); return
+    }
+
+    const bancoConfig = {
+      mp:         { nombre: 'Mercado Pago', buscar: a => a.name.toLowerCase().includes('mercado') },
+      visa:       { nombre: 'Visa',         buscar: a => a.name.toLowerCase().includes('visa') },
+      mastercard: { nombre: 'Mastercard',   buscar: a => a.name.toLowerCase().includes('master') },
+      canada:     { nombre: 'Canadá',       buscar: a => a.name.toLowerCase().includes('canad') },
+      patagonia:  { nombre: 'Patagonia',    buscar: a => a.name.toLowerCase().includes('patagonia') },
+    }
+    const cfg = bancoConfig[importBanco] || bancoConfig.mp
+    const cuenta = accounts.find(cfg.buscar) || accounts[0]
     const catOtros = categories?.find(c => c.name === 'Otros')
 
     const txns = []
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(sep).map(c => c.replace(/"/g, '').trim())
-      if (cols.length < 3) continue
-      const montoRaw = cols[iMonto]?.replace(/\./g, '').replace(',', '.') || '0'
-      const monto = parseFloat(montoRaw)
-      if (!monto || isNaN(monto)) continue
+      if (cols.length < 2) continue
 
-      const desc = iDesc >= 0 ? cols[iDesc] : `Movimiento MP ${i}`
-      const fechaRaw = iFecha >= 0 ? cols[iFecha] : cols[0]
-      // Intentar parsear fecha dd/mm/yyyy o yyyy-mm-dd
-      let fecha = new Date().toISOString().slice(0, 10)
-      if (fechaRaw) {
-        const partes = fechaRaw.split(/[\/\-]/)
-        if (partes.length >= 3) {
-          if (partes[0].length === 4) fecha = `${partes[0]}-${partes[1].padStart(2,'0')}-${partes[2].padStart(2,'0')}`
-          else fecha = `${partes[2]}-${partes[1].padStart(2,'0')}-${partes[0].padStart(2,'0')}`
-        }
+      let monto = 0
+      let tipo = 'expense'
+
+      if (iCredito >= 0 && iDebito >= 0) {
+        const cr = parsearMonto(cols[iCredito])
+        const db = parsearMonto(cols[iDebito])
+        if (cr > 0) { monto = cr; tipo = 'income' }
+        else if (db > 0) { monto = db; tipo = 'expense' }
+        else continue
+      } else if (iMonto >= 0) {
+        const raw = parsearMonto(cols[iMonto])
+        monto = Math.abs(raw)
+        tipo = raw < 0 ? 'expense' : 'income'
       }
 
-      txns.push({
-        type: monto < 0 ? 'expense' : 'income',
-        description: desc,
-        date: fecha,
-        amount_ars: Math.abs(monto),
-        amount_usd: 0,
-        category_id: catOtros?.id || null,
-        account_id: mpAccount?.id || null,
-        card_id: null,
-      })
+      if (!monto || isNaN(monto)) continue
+
+      const desc = iDesc >= 0 ? cols[iDesc] : `Movimiento ${cfg.nombre} ${i}`
+      const fecha = parsearFecha(iFecha >= 0 ? cols[iFecha] : cols[0])
+
+      txns.push({ type: tipo, description: desc, date: fecha, amount_ars: monto, amount_usd: 0, category_id: catOtros?.id || null, account_id: cuenta?.id || null, card_id: null })
     }
 
     if (txns.length === 0) { setImportMsg('No se encontraron movimientos válidos'); setImportando(false); return }
 
     const { error } = await supabase.from('transactions').insert(txns)
     if (error) setImportMsg(`Error: ${error.message}`)
-    else setImportMsg(`✅ ${txns.length} movimientos importados correctamente`)
+    else setImportMsg(`✅ ${txns.length} movimientos de ${cfg.nombre} importados`)
     setImportando(false)
     cargarTxns()
   }
@@ -352,9 +399,23 @@ export default function CuentasView({ accounts, cards, categories }) {
               <h2 className="text-lg font-bold text-gray-800">Importar Mercado Pago</h2>
               <button onClick={() => setModalImport(false)}><X size={20} className="text-gray-400" /></button>
             </div>
-            <p className="text-sm text-gray-500 mb-4">
-              En Mercado Pago → <b>Actividad</b> → <b>Descargar historial</b> → elegí el período → descargá el CSV y subilo acá.
-            </p>
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 font-medium mb-2">¿De qué banco es el archivo?</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'mp', label: '🟦 Mercado Pago' },
+                  { id: 'visa', label: '💳 Visa' },
+                  { id: 'mastercard', label: '💳 Mastercard' },
+                  { id: 'canada', label: '🏦 Canadá' },
+                  { id: 'patagonia', label: '🏦 Patagonia' },
+                ].map(b => (
+                  <button key={b.id} onClick={() => setImportBanco(b.id)}
+                    className={`py-2 px-2 rounded-xl text-xs font-medium border transition-colors ${importBanco === b.id ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200'}`}>
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className={`w-full flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition-colors ${importando ? 'opacity-50 pointer-events-none' : ''}`}>
               <Upload size={24} className="text-gray-400" />
               <p className="text-sm text-gray-500 font-medium">{importando ? 'Importando...' : 'Tocar para seleccionar el archivo CSV'}</p>
