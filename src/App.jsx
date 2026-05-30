@@ -51,7 +51,7 @@ export default function App() {
       {tab === 'resumen' && <ResumenView />}
       {tab === 'fijos'   && <GastosFijosView  categories={categories} accounts={accounts} cards={cards} />}
       {tab === 'buscar'  && <BuscadorView     categories={categories} accounts={accounts} cards={cards} />}
-      {tab === 'cuentas' && <CuentasView       accounts={accounts} cards={cards} />}
+      {tab === 'cuentas' && <CuentasView accounts={accounts} cards={cards} categories={categories} />}
       <NavBar tab={tab} setTab={setTab} />
     </div>
   )
