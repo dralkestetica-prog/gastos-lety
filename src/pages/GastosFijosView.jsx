@@ -1,0 +1,185 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { fmtARS } from '../lib/formato'
+import { Plus, X, Check } from 'lucide-react'
+import { format } from 'date-fns'
+
+const MES_ACTUAL = format(new Date(), 'yyyy-MM')
+
+export default function GastosFijosView({ categories, accounts, cards }) {
+  const [fijos, setFijos] = useState([])
+  const [pagados, setPagados] = useState(new Set())
+  const [loading, setLoading] = useState(true)
+  const [modal, setModal] = useState(false)
+  const [form, setForm] = useState({ name: '', amount_ars: '', category_id: '', account_id: '', card_id: '', due_day: '' })
+  const [saving, setSaving] = useState(false)
+
+  async function cargar() {
+    const [{ data: fijosList }, { data: txPagadas }] = await Promise.all([
+      supabase.from('fixed_expenses').select('*, categories(name,icon)').eq('is_active', true).order('due_day'),
+      supabase.from('transactions').select('fixed_expense_id').eq('is_fixed', true)
+        .gte('date', MES_ACTUAL + '-01').lte('date', MES_ACTUAL + '-31').not('fixed_expense_id', 'is', null),
+    ])
+    setFijos(fijosList || [])
+    setPagados(new Set((txPagadas || []).map(t => t.fixed_expense_id)))
+    setLoading(false)
+  }
+
+  useEffect(() => { cargar() }, [])
+
+  async function marcarPagado(fijo) {
+    if (pagados.has(fijo.id)) return
+    const dia = String(fijo.due_day || 1).padStart(2, '0')
+    await supabase.from('transactions').insert({
+      type: 'expense',
+      description: fijo.name,
+      date: `${MES_ACTUAL}-${dia}`,
+      amount_ars: fijo.amount_ars,
+      amount_usd: fijo.amount_usd || 0,
+      category_id: fijo.category_id,
+      account_id: fijo.account_id || null,
+      card_id: fijo.card_id || null,
+      is_fixed: true,
+      fixed_expense_id: fijo.id,
+    })
+    cargar()
+  }
+
+  async function guardarFijo() {
+    if (!form.name || !form.amount_ars) return
+    setSaving(true)
+    const isCard = cards.some(c => c.id === form.card_id)
+    await supabase.from('fixed_expenses').insert({
+      name: form.name,
+      amount_ars: parseFloat(form.amount_ars),
+      amount_usd: 0,
+      category_id: form.category_id || null,
+      account_id: isCard ? null : (form.account_id || null),
+      card_id: isCard ? form.card_id : null,
+      payment_method: isCard ? 'card' : 'account',
+      due_day: parseInt(form.due_day) || 1,
+      is_active: true,
+    })
+    setSaving(false)
+    setModal(false)
+    setForm({ name: '', amount_ars: '', category_id: '', account_id: '', card_id: '', due_day: '' })
+    cargar()
+  }
+
+  async function eliminarFijo(id) {
+    if (!confirm('¿Eliminar este gasto fijo?')) return
+    await supabase.from('fixed_expenses').update({ is_active: false }).eq('id', id)
+    cargar()
+  }
+
+  const totalFijos = fijos.reduce((s, f) => s + Number(f.amount_ars), 0)
+  const totalPagado = fijos.filter(f => pagados.has(f.id)).reduce((s, f) => s + Number(f.amount_ars), 0)
+
+  if (loading) return <p className="text-center text-gray-400 mt-20">Cargando...</p>
+
+  const selectedMedioId = form.card_id || form.account_id
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="max-w-md mx-auto p-4">
+
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-bold text-brand-600">Gastos fijos</h1>
+          <button onClick={() => setModal(true)} className="w-9 h-9 bg-brand-600 text-white rounded-full flex items-center justify-center">
+            <Plus size={20} />
+          </button>
+        </div>
+
+        {/* Resumen */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+          <div className="flex justify-between mb-2">
+            <div>
+              <p className="text-xs text-gray-400">Total fijos / mes</p>
+              <p className="text-xl font-bold text-gray-800">{fmtARS(totalFijos)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">Pagado este mes</p>
+              <p className="text-xl font-bold text-green-600">{fmtARS(totalPagado)}</p>
+            </div>
+          </div>
+          {/* Barra progreso */}
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-500 rounded-full transition-all"
+              style={{ width: totalFijos ? `${Math.min((totalPagado / totalFijos) * 100, 100)}%` : '0%' }}
+            />
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            {fijos.filter(f => pagados.has(f.id)).length} de {fijos.length} pagados
+          </p>
+        </div>
+
+        {fijos.length === 0 ? (
+          <p className="text-center text-gray-400 mt-10">No hay gastos fijos cargados.<br/>Tocá + para agregar.</p>
+        ) : (
+          <div className="space-y-2">
+            {fijos.map(f => {
+              const esPagado = pagados.has(f.id)
+              return (
+                <div key={f.id} className={`bg-white rounded-xl shadow-sm px-4 py-3 flex items-center gap-3 transition-opacity ${esPagado ? 'opacity-50' : ''}`}>
+                  <div className="shrink-0 w-8 text-center">
+                    <p className="text-xs text-gray-400">día</p>
+                    <p className="text-sm font-bold text-gray-700">{f.due_day || '-'}</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-800 text-sm truncate">{f.name}</p>
+                    <p className="text-xs text-gray-400">{f.categories?.icon} {f.categories?.name || ''}</p>
+                  </div>
+                  <p className="font-bold text-sm text-gray-800 shrink-0">{fmtARS(f.amount_ars)}</p>
+                  <button
+                    onClick={() => marcarPagado(f)}
+                    disabled={esPagado}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${esPagado ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500'}`}
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button onClick={() => eliminarFijo(f.id)} className="text-gray-300 hover:text-red-400">
+                    <X size={16} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setModal(false)}>
+          <div className="bg-white w-full max-w-md rounded-t-2xl p-5 pb-8 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-gray-800">Nuevo gasto fijo</h2>
+              <button onClick={() => setModal(false)}><X size={20} className="text-gray-400" /></button>
+            </div>
+            <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" placeholder="Nombre (ej: Alquiler)" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            <input type="number" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" placeholder="Monto ARS" value={form.amount_ars} onChange={e => setForm(f => ({ ...f, amount_ars: e.target.value }))} />
+            <input type="number" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" placeholder="Día del mes (ej: 5)" min="1" max="31" value={form.due_day} onChange={e => setForm(f => ({ ...f, due_day: e.target.value }))} />
+            <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}>
+              <option value="">Categoría (opcional)</option>
+              {categories.filter(c => c.kind === 'expense' || c.kind === 'both').map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+            <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"
+              value={selectedMedioId}
+              onChange={e => {
+                const val = e.target.value
+                cards.some(c => c.id === val)
+                  ? setForm(f => ({ ...f, card_id: val, account_id: '' }))
+                  : setForm(f => ({ ...f, account_id: val, card_id: '' }))
+              }}>
+              <option value="">Medio de pago (opcional)</option>
+              <optgroup label="Cuentas">{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>
+              <optgroup label="Tarjetas">{cards.map(c => <option key={c.id} value={c.id}>💳 {c.name}</option>)}</optgroup>
+            </select>
+            <button onClick={guardarFijo} disabled={saving} className="w-full bg-brand-600 text-white font-semibold py-3 rounded-xl disabled:opacity-50">
+              {saving ? 'Guardando...' : 'Agregar'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
