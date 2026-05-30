@@ -77,27 +77,58 @@ button {
 
 /* ===== PDF / PRINT ===== */
 @media print {
+  /* Ocultar UI de navegación y controles */
   .no-print,
   nav,
-  button.fixed {
+  button.fixed,
+  .fixed.bottom-24,
+  .fixed.z-30 {
     display: none !important;
   }
 
-  body {
+  html, body {
     background: white !important;
+    color: black !important;
+    font-size: 12px;
   }
 
+  /* Forzar fondo blanco en dark mode */
   .dark .bg-white,
-  .dark .bg-gray-50 {
+  .dark .bg-gray-50,
+  .dark #root,
+  .dark body {
     background-color: white !important;
     color: black !important;
   }
 
-  .max-w-md {
-    max-width: 100% !important;
+  .dark .text-gray-800,
+  .dark .text-gray-700,
+  .dark .text-gray-600,
+  .dark .text-gray-500,
+  .dark .text-gray-400 {
+    color: #374151 !important;
   }
 
+  .max-w-md {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Eliminar sombras y borders innecesarios */
   * {
     box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
+
+  /* Cada card en nueva línea si es necesario */
+  .rounded-xl, .rounded-2xl {
+    border: 1px solid #e5e7eb !important;
+    break-inside: avoid;
+    margin-bottom: 8px !important;
+  }
+
+  /* Colores de income/expense se mantienen */
+  .text-green-600 { color: #16a34a !important; }
+  .text-red-500   { color: #ef4444 !important; }
 }
