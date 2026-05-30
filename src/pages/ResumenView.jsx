@@ -46,13 +46,43 @@ export default function ResumenView() {
 
       setDatos(meses)
 
-      // Cuotas activas pendientes
+      // Cuotas activas — calcula installments_paid desde transacciones reales
       const { data: instData } = await supabase
         .from('installments')
-        .select('description, installment_amount_ars, total_installments, installments_paid, first_billing_month, cards(name)')
+        .select('id, description, installment_amount_ars, total_installments, installments_paid, first_billing_month, cards(name)')
         .eq('is_active', true)
         .order('first_billing_month')
-      setCuotas(instData || [])
+
+      if (instData?.length) {
+        const hoy = format(new Date(), 'yyyy-MM-dd')
+        const { data: txInst } = await supabase
+          .from('transactions')
+          .select('installment_id, date')
+          .in('installment_id', instData.map(i => i.id))
+          .lte('date', hoy)
+
+        const pagadasPorInst = {}
+        txInst?.forEach(t => {
+          pagadasPorInst[t.installment_id] = (pagadasPorInst[t.installment_id] || 0) + 1
+        })
+
+        const cuotasActualizadas = instData.map(c => ({
+          ...c,
+          installments_paid: pagadasPorInst[c.id] || 0,
+        }))
+
+        // Sincronizar con DB si el valor cambió
+        for (const c of cuotasActualizadas) {
+          const original = instData.find(i => i.id === c.id)
+          if (original && original.installments_paid !== c.installments_paid) {
+            await supabase.from('installments').update({ installments_paid: c.installments_paid }).eq('id', c.id)
+          }
+        }
+
+        setCuotas(cuotasActualizadas.filter(c => c.installments_paid < c.total_installments))
+      } else {
+        setCuotas([])
+      }
 
       setLoading(false)
     }

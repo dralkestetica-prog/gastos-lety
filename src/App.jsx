@@ -59,7 +59,15 @@ export default function App() {
       {tab === 'fijos'   && <GastosFijosView  categories={categories} accounts={accounts} cards={cards} />}
       {tab === 'buscar'  && <BuscadorView     categories={categories} accounts={accounts} cards={cards} />}
       {tab === 'cuentas' && <CuentasView accounts={accounts} cards={cards} categories={categories} />}
-      <NavBar tab={tab} setTab={setTab} darkMode={darkMode} toggleDark={() => setDarkMode(d => !d)} />
+      <NavBar tab={tab} setTab={setTab} />
+      {tab === 'cuentas' && (
+        <button
+          onClick={() => setDarkMode(d => !d)}
+          className="fixed top-4 right-4 z-50 w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center text-gray-500 hover:text-brand-600 no-print"
+        >
+          {darkMode ? '☀️' : '🌙'}
+        </button>
+      )}
     </div>
   )
 }

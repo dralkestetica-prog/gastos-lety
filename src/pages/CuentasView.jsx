@@ -424,7 +424,9 @@ export default function CuentasView({ accounts, cards, categories }) {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setModalImport(false)}>
           <div className="bg-white w-full max-w-md rounded-t-2xl p-5 pb-8" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Importar Mercado Pago</h2>
+              <h2 className="text-lg font-bold text-gray-800">Importar {
+                { mp: 'Mercado Pago', visa: 'Visa', mastercard: 'Mastercard', canada: 'Canadá', patagonia: 'Patagonia' }[importBanco]
+              }</h2>
               <button onClick={() => setModalImport(false)}><X size={20} className="text-gray-400" /></button>
             </div>
             <div className="mb-4">

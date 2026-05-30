@@ -1,6 +1,6 @@
-import { LayoutList, CreditCard, Search, BarChart2, Repeat, Moon, Sun } from 'lucide-react'
+import { LayoutList, CreditCard, Search, BarChart2, Repeat } from 'lucide-react'
 
-export default function NavBar({ tab, setTab, darkMode, toggleDark }) {
+export default function NavBar({ tab, setTab }) {
   const items = [
     { id: 'mes',     label: 'Mes',    Icon: LayoutList },
     { id: 'resumen', label: 'Stats',  Icon: BarChart2  },
@@ -22,13 +22,6 @@ export default function NavBar({ tab, setTab, darkMode, toggleDark }) {
           {label}
         </button>
       ))}
-      <button
-        onClick={toggleDark}
-        className="w-12 flex flex-col items-center py-3 gap-0.5 text-xs font-medium text-gray-400 transition-colors hover:text-brand-600"
-      >
-        {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-        {darkMode ? 'Luz' : 'Dark'}
-      </button>
     </nav>
   )
 }
