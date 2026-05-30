@@ -11,14 +11,16 @@ export default function BuscadorView({ categories, accounts, cards }) {
   const [catFiltro, setCatFiltro] = useState('')
   const [montoMin, setMontoMin] = useState('')
   const [montoMax, setMontoMax] = useState('')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
   const [resultados, setResultados] = useState([])
   const [buscando, setBuscando] = useState(false)
   const [buscado, setBuscado] = useState(false)
   const [modal, setModal] = useState(null)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
 
-  async function buscar(q = query, cat = catFiltro, min = montoMin, max = montoMax) {
-    const hayFiltro = q.trim() || cat || min || max
+  async function buscar(q = query, cat = catFiltro, min = montoMin, max = montoMax, de = desde, ha = hasta) {
+    const hayFiltro = q.trim() || cat || min || max || de || ha
     if (!hayFiltro) { setResultados([]); setBuscado(false); return }
     setBuscando(true)
 
@@ -26,12 +28,14 @@ export default function BuscadorView({ categories, accounts, cards }) {
       .from('transactions')
       .select('*, categories(name,icon), accounts!transactions_account_id_fkey(name), cards(name)')
       .order('date', { ascending: false })
-      .limit(100)
+      .limit(200)
 
     if (q.trim()) query_sb = query_sb.ilike('description', `%${q.trim()}%`)
     if (cat) query_sb = query_sb.eq('category_id', cat)
     if (min) query_sb = query_sb.gte('amount_ars', parseFloat(min))
     if (max) query_sb = query_sb.lte('amount_ars', parseFloat(max))
+    if (de) query_sb = query_sb.gte('date', de)
+    if (ha) query_sb = query_sb.lte('date', ha)
 
     const { data } = await query_sb
     setResultados(data || [])
@@ -40,7 +44,7 @@ export default function BuscadorView({ categories, accounts, cards }) {
   }
 
   function limpiar() {
-    setQuery(''); setCatFiltro(''); setMontoMin(''); setMontoMax('')
+    setQuery(''); setCatFiltro(''); setMontoMin(''); setMontoMax(''); setDesde(''); setHasta('')
     setResultados([]); setBuscado(false)
   }
 
@@ -99,6 +103,26 @@ export default function BuscadorView({ categories, accounts, cards }) {
                 value={montoMax}
                 onChange={e => { setMontoMax(e.target.value); buscar(query, catFiltro, montoMin, e.target.value) }}
               />
+            </div>
+            <div className="flex gap-2 items-center">
+              <div className="flex-1">
+                <p className="text-xs text-gray-400 mb-1">Desde</p>
+                <input
+                  type="date"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                  value={desde}
+                  onChange={e => { setDesde(e.target.value); buscar(query, catFiltro, montoMin, montoMax, e.target.value, hasta) }}
+                />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-gray-400 mb-1">Hasta</p>
+                <input
+                  type="date"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                  value={hasta}
+                  onChange={e => { setHasta(e.target.value); buscar(query, catFiltro, montoMin, montoMax, desde, e.target.value) }}
+                />
+              </div>
             </div>
           </div>
         )}

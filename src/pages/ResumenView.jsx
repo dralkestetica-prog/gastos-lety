@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fmtARS } from '../lib/formato'
 import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 const HOY = new Date()
 
@@ -88,6 +89,30 @@ export default function ResumenView() {
               <p className="text-xs text-gray-400">Egresos totales</p>
               <p className="text-sm font-semibold text-red-500">{fmtARS(totalEgresos)}</p>
             </div>
+          </div>
+        </div>
+
+        {/* Gráfico de línea - evolución mensual */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Evolución de egresos</h3>
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={datos} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false}
+                tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} width={36} />
+              <Tooltip
+                formatter={(v, name) => [fmtARS(v), name === 'egresos' ? 'Egresos' : 'Ingresos']}
+                labelStyle={{ fontSize: 12, color: '#374151', textTransform: 'capitalize' }}
+                contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: 12 }}
+              />
+              <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2.5} dot={{ r: 4, fill: '#ef4444' }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="ingresos" stroke="#22c55e" strokeWidth={2} dot={{ r: 3, fill: '#22c55e' }} strokeDasharray="4 2" />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="flex gap-4 mt-1 justify-center">
+            <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-4 h-0.5 bg-red-400 inline-block rounded" /> Egresos</span>
+            <span className="flex items-center gap-1 text-xs text-gray-500"><span className="w-4 h-0.5 bg-green-400 inline-block rounded" style={{borderTop:'2px dashed #22c55e',background:'none'}} /> Ingresos</span>
           </div>
         </div>
 

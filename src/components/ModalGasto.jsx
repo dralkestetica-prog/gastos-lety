@@ -15,6 +15,7 @@ const EMPTY = {
   account_id: '',
   card_id: '',
   cuotas: 1,
+  notes: '',
 }
 
 export default function ModalGasto({ onClose, onSaved, editData, categories, accounts, cards }) {
@@ -39,6 +40,7 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
         account_id: editData.account_id || '',
         card_id: editData.card_id || '',
         cuotas: editData.installment_id ? '' : 1,
+        notes: editData.notes || '',
       })
     }
   }, [editData])
@@ -74,6 +76,7 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
       category_id: form.category_id,
       account_id: form.account_id || null,
       card_id: form.card_id || null,
+      notes: form.notes.trim() || null,
     }
 
     try {
@@ -320,6 +323,18 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
               )}
             </div>
           )}
+
+          {/* Notas */}
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Notas <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <textarea
+              className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand-400 resize-none"
+              placeholder="Detalle adicional..."
+              rows={2}
+              value={form.notes}
+              onChange={(e) => set('notes', e.target.value)}
+            />
+          </div>
         </div>
 
         {error && (

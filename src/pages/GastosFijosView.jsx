@@ -5,13 +5,14 @@ import { Plus, X, Check, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 
 const MES_ACTUAL = format(new Date(), 'yyyy-MM')
-const FORM_VACIO = { name: '', amount_ars: '', category_id: '', account_id: '', card_id: '', due_day: '' }
+const FORM_VACIO = { name: '', amount_ars: '', category_id: '', account_id: '', card_id: '', due_day: '', tipo: 'expense' }
 
 export default function GastosFijosView({ categories, accounts, cards }) {
   const [fijos, setFijos] = useState([])
   const [pagados, setPagados] = useState(new Set())
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState(null) // null | 'nuevo' | {fijo editando}
+  const [tab, setTab] = useState('expense') // 'expense' | 'income'
+  const [modal, setModal] = useState(null)
   const [form, setForm] = useState(FORM_VACIO)
   const [saving, setSaving] = useState(false)
 
@@ -25,6 +26,8 @@ export default function GastosFijosView({ categories, accounts, cards }) {
     setPagados(new Set((txPagadas || []).map(t => t.fixed_expense_id)))
     setLoading(false)
   }
+
+  const fijosFiltrados = fijos.filter(f => (f.type || 'expense') === tab)
 
   useEffect(() => { cargar() }, [])
 
@@ -41,7 +44,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   }
 
   function abrirNuevo() {
-    setForm(FORM_VACIO)
+    setForm({ ...FORM_VACIO, tipo: tab })
     setModal('nuevo')
   }
 
@@ -50,7 +53,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
     const dia = String(fijo.due_day || 1).padStart(2, '0')
     if (navigator.vibrate) navigator.vibrate(50)
     await supabase.from('transactions').insert({
-      type: 'expense',
+      type: fijo.type || 'expense',
       description: fijo.name,
       date: `${MES_ACTUAL}-${dia}`,
       amount_ars: fijo.amount_ars,
@@ -78,6 +81,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
       payment_method: isCard ? 'card' : 'account',
       due_day: parseInt(form.due_day) || 1,
       is_active: true,
+      type: form.tipo || 'expense',
     }
     if (modal === 'nuevo') {
       await supabase.from('fixed_expenses').insert(payload)
@@ -96,8 +100,8 @@ export default function GastosFijosView({ categories, accounts, cards }) {
     cargar()
   }
 
-  const totalFijos = fijos.reduce((s, f) => s + Number(f.amount_ars), 0)
-  const totalPagado = fijos.filter(f => pagados.has(f.id)).reduce((s, f) => s + Number(f.amount_ars), 0)
+  const totalFijos = fijosFiltrados.reduce((s, f) => s + Number(f.amount_ars), 0)
+  const totalPagado = fijosFiltrados.filter(f => pagados.has(f.id)).reduce((s, f) => s + Number(f.amount_ars), 0)
 
   if (loading) return <p className="text-center text-gray-400 mt-20">Cargando...</p>
 
@@ -109,9 +113,21 @@ export default function GastosFijosView({ categories, accounts, cards }) {
       <div className="max-w-md mx-auto p-4">
 
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold text-brand-600">Gastos fijos</h1>
+          <h1 className="text-xl font-bold text-brand-600">Recurrentes</h1>
           <button onClick={abrirNuevo} className="w-9 h-9 bg-brand-600 text-white rounded-full flex items-center justify-center">
             <Plus size={20} />
+          </button>
+        </div>
+
+        {/* Tabs gastos / ingresos */}
+        <div className="flex rounded-xl overflow-hidden border border-gray-200 mb-4">
+          <button onClick={() => setTab('expense')}
+            className={`flex-1 py-2 text-sm font-semibold transition-colors ${tab === 'expense' ? 'bg-red-500 text-white' : 'text-gray-500'}`}>
+            Gastos fijos
+          </button>
+          <button onClick={() => setTab('income')}
+            className={`flex-1 py-2 text-sm font-semibold transition-colors ${tab === 'income' ? 'bg-green-500 text-white' : 'text-gray-500'}`}>
+            Ingresos fijos
           </button>
         </div>
 
@@ -119,11 +135,11 @@ export default function GastosFijosView({ categories, accounts, cards }) {
         <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
           <div className="flex justify-between mb-2">
             <div>
-              <p className="text-xs text-gray-400">Total fijos / mes</p>
-              <p className="text-xl font-bold text-gray-800">{fmtARS(totalFijos)}</p>
+              <p className="text-xs text-gray-400">{tab === 'expense' ? 'Total gastos / mes' : 'Total ingresos / mes'}</p>
+              <p className={`text-xl font-bold ${tab === 'income' ? 'text-green-600' : 'text-gray-800'}`}>{fmtARS(totalFijos)}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-400">Pagado este mes</p>
+              <p className="text-xs text-gray-400">{tab === 'expense' ? 'Pagado este mes' : 'Cobrado este mes'}</p>
               <p className="text-xl font-bold text-green-600">{fmtARS(totalPagado)}</p>
             </div>
           </div>
@@ -132,15 +148,15 @@ export default function GastosFijosView({ categories, accounts, cards }) {
               style={{ width: totalFijos ? `${Math.min((totalPagado / totalFijos) * 100, 100)}%` : '0%' }} />
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            {fijos.filter(f => pagados.has(f.id)).length} de {fijos.length} pagados
+            {fijosFiltrados.filter(f => pagados.has(f.id)).length} de {fijosFiltrados.length} {tab === 'expense' ? 'pagados' : 'cobrados'}
           </p>
         </div>
 
-        {fijos.length === 0 ? (
-          <p className="text-center text-gray-400 mt-10">No hay gastos fijos.<br/>Tocá + para agregar.</p>
+        {fijosFiltrados.length === 0 ? (
+          <p className="text-center text-gray-400 mt-10">No hay {tab === 'expense' ? 'gastos' : 'ingresos'} fijos.<br/>Tocá + para agregar.</p>
         ) : (
           <div className="space-y-2">
-            {fijos.map(f => {
+            {fijosFiltrados.map(f => {
               const esPagado = pagados.has(f.id)
               return (
                 <button
@@ -176,7 +192,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
           <div className="bg-white w-full max-w-md rounded-t-2xl p-5 pb-8 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-bold text-gray-800">
-                {esEdicion ? 'Editar gasto fijo' : 'Nuevo gasto fijo'}
+                {esEdicion ? (form.tipo === 'income' ? 'Editar ingreso fijo' : 'Editar gasto fijo') : (form.tipo === 'income' ? 'Nuevo ingreso fijo' : 'Nuevo gasto fijo')}
               </h2>
               <div className="flex gap-2">
                 {esEdicion && (

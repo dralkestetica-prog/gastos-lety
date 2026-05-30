@@ -258,6 +258,27 @@ export default function CuentasView({ accounts, cards, categories }) {
           </button>
         </div>
 
+        {/* Patrimonio neto */}
+        {(() => {
+          const totalARS = accounts
+            .filter(a => a.currency !== 'USD')
+            .reduce((s, a) => s + (balances[a.id]?.ars || 0), 0)
+          const totalUSDenARS = accounts
+            .filter(a => a.currency === 'USD')
+            .reduce((s, a) => s + (balances[a.id]?.usd || 0) * (dolar || 0), 0)
+          const patrimonio = totalARS + totalUSDenARS
+          return (
+            <div className="bg-gradient-to-r from-brand-600 to-pink-500 rounded-2xl shadow-sm p-4 mb-4 text-white">
+              <p className="text-xs opacity-80 mb-1">Patrimonio neto total</p>
+              <p className="text-3xl font-bold">{fmtARS(patrimonio)}</p>
+              <div className="flex gap-4 mt-2 text-xs opacity-80">
+                <span>Cuentas ARS: {fmtARS(totalARS)}</span>
+                {totalUSDenARS > 0 && <span>USD (blue): {fmtARS(totalUSDenARS)}</span>}
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Importar MP */}
         <button onClick={() => setModalImport(true)}
           className="w-full mb-4 flex items-center justify-center gap-2 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-600 font-medium hover:bg-blue-100">
