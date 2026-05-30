@@ -42,19 +42,20 @@ export default function GraficoCategoria({ movs }) {
   if (!data.length) return null
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">Egresos por categoría</h3>
-      <div className="flex gap-4 items-center">
-        {/* Torta */}
-        <div className="w-28 h-28 shrink-0">
+    <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
+      <h3 className="text-sm font-semibold text-gray-700 mb-4">Egresos por categoría</h3>
+
+      {/* Torta centrada */}
+      <div className="flex justify-center mb-4">
+        <div style={{ width: 180, height: 180 }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius={28}
-                outerRadius={52}
+                innerRadius={50}
+                outerRadius={82}
                 paddingAngle={2}
                 dataKey="value"
               >
@@ -66,23 +67,25 @@ export default function GraficoCategoria({ movs }) {
             </PieChart>
           </ResponsiveContainer>
         </div>
+      </div>
 
-        {/* Leyenda */}
-        <div className="flex-1 space-y-1.5 overflow-hidden">
-          {data.slice(0, 6).map((d, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: COLORES[i % COLORES.length] }}
-              />
-              <span className="text-xs text-gray-600 truncate flex-1">{d.icon} {d.name}</span>
-              <div className="text-right shrink-0">
-                <p className="text-xs font-semibold text-gray-800">{fmtARS(d.value)}</p>
-                <p className="text-xs text-gray-400">{d.pct}%</p>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Leyenda full-width — nombres completos */}
+      <div className="space-y-2">
+        {data.slice(0, 7).map((d, i) => (
+          <div key={i} className="flex items-center gap-2.5">
+            <span
+              className="w-3 h-3 rounded-full shrink-0"
+              style={{ backgroundColor: COLORES[i % COLORES.length] }}
+            />
+            <span className="text-sm text-gray-700 flex-1 truncate">
+              {d.icon} {d.name}
+            </span>
+            <span className="text-xs text-gray-400 shrink-0 w-8 text-right">{d.pct}%</span>
+            <span className="text-sm font-semibold text-gray-800 shrink-0 w-24 text-right tabular-nums">
+              {fmtARS(d.value)}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   )

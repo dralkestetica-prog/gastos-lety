@@ -8,7 +8,7 @@ import { es } from 'date-fns/locale'
 const TIPO_ICON = { bank: '🏦', wallet: '📱', cash: '💵', other: '📦' }
 const TIPO_LABEL = { bank: 'Banco', wallet: 'Billetera', cash: 'Efectivo', other: 'Otro' }
 
-export default function CuentasView({ accounts, cards, categories }) {
+export default function CuentasView({ accounts, cards, categories, darkMode, toggleDark }) {
   const [balances, setBalances] = useState({})
   const [cardTotals, setCardTotals] = useState({})
   const [cardTxIds, setCardTxIds] = useState({})
@@ -469,6 +469,29 @@ export default function CuentasView({ accounts, cards, categories }) {
                 {importMsg}
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Ajustes */}
+      {!cuentaDetalle && (
+        <div className="max-w-md mx-auto px-4 pb-2 mt-6">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 px-1">Ajustes</p>
+          <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{darkMode ? '🌙' : '☀️'}</span>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Modo oscuro</p>
+                  <p className="text-xs text-gray-400">{darkMode ? 'Activado' : 'Desactivado'}</p>
+                </div>
+              </div>
+              <button onClick={toggleDark} className="flex items-center">
+                <div className={`w-12 h-6 rounded-full transition-colors duration-300 flex items-center px-0.5 ${darkMode ? 'bg-brand-600' : 'bg-gray-300'}`}>
+                  <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${darkMode ? 'translate-x-6' : 'translate-x-0'}`} />
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       )}

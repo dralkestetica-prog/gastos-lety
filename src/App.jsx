@@ -70,23 +70,10 @@ export default function App() {
           {tab === 'resumen' && <ResumenView />}
           {tab === 'fijos'   && <GastosFijosView  categories={categories} accounts={accounts} cards={cards} />}
           {tab === 'buscar'  && <BuscadorView     categories={categories} accounts={accounts} cards={cards} />}
-          {tab === 'cuentas' && <CuentasView      accounts={accounts} cards={cards} categories={categories} />}
+          {tab === 'cuentas' && <CuentasView      accounts={accounts} cards={cards} categories={categories} darkMode={darkMode} toggleDark={() => setDarkMode(d => !d)} />}
         </div>
 
         <NavBar tab={tab} setTab={setTab} />
-
-        {/* Toggle dark mode — interruptor animado, siempre visible */}
-        <button
-          onClick={() => setDarkMode(d => !d)}
-          className="fixed top-4 right-4 z-50 no-print flex items-center"
-          aria-label="Modo oscuro"
-        >
-          <div className={`w-12 h-6 rounded-full transition-colors duration-300 flex items-center px-0.5 ${darkMode ? 'bg-brand-600' : 'bg-gray-300'}`}>
-            <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 flex items-center justify-center text-[10px] ${darkMode ? 'translate-x-6' : 'translate-x-0'}`}>
-              {darkMode ? '🌙' : '☀️'}
-            </div>
-          </div>
-        </button>
 
       </div>
     </ConfirmProvider>
