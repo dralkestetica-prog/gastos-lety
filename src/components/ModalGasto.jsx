@@ -33,18 +33,17 @@ export default function ModalGasto({ onClose, onSaved, editData, categories, acc
     }
     // Normalizar null a '' para que los selects funcionen correctamente
     setForm({
-        type: editData.type || 'expense',
-        description: editData.description || '',
-        date: editData.date || HOY,
-        amount_ars: editData.amount_ars || '',
-        amount_usd: editData.amount_usd || '',
-        category_id: editData.category_id ?? '',
-        account_id: editData.account_id ?? '',
-        card_id: editData.card_id ?? '',
-        cuotas: editData.installment_id ? 1 : 1,
-        notes: editData.notes || '',
-      })
-    }
+      type: editData.type || 'expense',
+      description: editData.description || '',
+      date: editData.date || HOY,
+      amount_ars: editData.amount_ars || '',
+      amount_usd: editData.amount_usd || '',
+      category_id: editData.category_id ?? '',
+      account_id: editData.account_id ?? '',
+      card_id: editData.card_id ?? '',
+      cuotas: 1,
+      notes: editData.notes || '',
+    })
   }, [editData])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
