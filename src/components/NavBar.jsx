@@ -11,12 +11,12 @@ export default function NavBar({ tab, setTab }) {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 flex z-40 no-print border-t border-gray-200/60"
+      className="fixed bottom-0 left-0 right-0 flex z-40 no-print border-t border-pink-100/80"
       style={{
         paddingBottom: 'env(safe-area-inset-bottom)',
-        background: 'rgba(255,255,255,0.85)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        background: 'rgba(253, 242, 248, 0.92)',
+        backdropFilter: 'blur(24px) saturate(200%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(200%)',
       }}
     >
       {items.map(({ id, label, Icon }) => {
