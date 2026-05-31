@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fmtARS, fmtUSD } from '../lib/formato'
-import { RefreshCw, CheckCircle, ChevronRight, X, Upload, FileText, Eye } from 'lucide-react'
+import { RefreshCw, CheckCircle, ChevronRight, X, Upload, FileText, Eye, GitMerge } from 'lucide-react'
+import ConciliacionModal from '../components/ConciliacionModal'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import * as pdfjsLib from 'pdfjs-dist'
@@ -27,6 +28,7 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
   const [importBanco, setImportBanco] = useState('patagonia')
   const [preview, setPreview] = useState(null) // { txns, fileName }
   const [modalPago, setModalPago] = useState(null) // { card, total, ids }
+  const [modalConciliar, setModalConciliar] = useState(false)
 
   async function cargarTxns() {
     const { data: txns } = await supabase
@@ -426,11 +428,17 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
           )
         })()}
 
-        {/* Importar extracto */}
-        <button onClick={() => { setModalImport(true); setPreview(null); setImportMsg(null) }}
-          className="w-full mb-4 flex items-center justify-center gap-2 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-600 font-medium hover:bg-blue-100">
-          <Upload size={15} /> Importar extracto bancario (PDF o CSV)
-        </button>
+        {/* Botones importar / conciliar */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setModalConciliar(true)}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand-50 border border-brand-200 rounded-xl text-sm text-brand-600 font-semibold hover:bg-brand-100">
+            <GitMerge size={15} /> Conciliar
+          </button>
+          <button onClick={() => { setModalImport(true); setPreview(null); setImportMsg(null) }}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-600 font-medium hover:bg-blue-100">
+            <Upload size={15} /> Importar
+          </button>
+        </div>
 
         {/* Cuentas */}
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Cuentas</h2>
@@ -629,6 +637,16 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal conciliación */}
+      {modalConciliar && (
+        <ConciliacionModal
+          onClose={() => { setModalConciliar(false); cargarTxns() }}
+          accounts={accounts}
+          categories={categories}
+          cards={cards}
+        />
       )}
 
       {/* Ajustes */}
