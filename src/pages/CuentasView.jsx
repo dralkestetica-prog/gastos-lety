@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fmtARS, fmtUSD } from '../lib/formato'
-import { RefreshCw, CheckCircle, ChevronRight, X, Upload } from 'lucide-react'
+import { RefreshCw, CheckCircle, ChevronRight, X, Upload, FileText, Eye } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import * as pdfjsLib from 'pdfjs-dist'
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href
 
 const TIPO_ICON = { bank: '🏦', wallet: '📱', cash: '💵', other: '📦' }
 const TIPO_LABEL = { bank: 'Banco', wallet: 'Billetera', cash: 'Efectivo', other: 'Otro' }
@@ -22,7 +24,8 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
   const [modalImport, setModalImport] = useState(false)
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
-  const [importBanco, setImportBanco] = useState('mp')
+  const [importBanco, setImportBanco] = useState('patagonia')
+  const [preview, setPreview] = useState(null) // { txns, fileName }
   const [modalPago, setModalPago] = useState(null) // { card, total, ids }
 
   async function cargarTxns() {
@@ -125,118 +128,202 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
     cargarTxns()
   }
 
+  const BANCO_CFG = {
+    mp:         { nombre: 'Mercado Pago', buscarCuenta: a => a.name.toLowerCase().includes('mercado') },
+    visa:       { nombre: 'Visa',         buscarCuenta: a => a.name.toLowerCase().includes('visa'), esCard: true },
+    mastercard: { nombre: 'Mastercard',   buscarCuenta: a => a.name.toLowerCase().includes('master'), esCard: true },
+    patagonia:  { nombre: 'Patagonia',    buscarCuenta: a => a.name.toLowerCase().includes('patagonia') },
+    canada:     { nombre: 'Canadá',       buscarCuenta: a => a.name.toLowerCase().includes('canad') },
+  }
+
   function parsearFecha(raw) {
     if (!raw) return new Date().toISOString().slice(0, 10)
-    const partes = raw.trim().split(/[\/\-\s]/)[0] ? raw.trim().split(/[\/\-]/) : []
+    const partes = raw.trim().split(/[\/\-]/)
     if (partes.length >= 3) {
       if (partes[0].length === 4) return `${partes[0]}-${partes[1].padStart(2,'0')}-${partes[2].slice(0,2).padStart(2,'0')}`
-      return `${partes[2]}-${partes[1].padStart(2,'0')}-${partes[0].padStart(2,'0')}`
+      return `${partes[2].length === 4 ? partes[2] : '20' + partes[2]}-${partes[1].padStart(2,'0')}-${partes[0].padStart(2,'0')}`
     }
     return new Date().toISOString().slice(0, 10)
   }
 
   function parsearMonto(raw) {
     if (!raw) return 0
-    const clean = raw.replace(/\s/g, '').replace(/\./g, '').replace(',', '.')
+    const clean = String(raw).replace(/\s/g, '').replace(/\$/g,'').replace(/\./g, '').replace(',', '.')
     return parseFloat(clean) || 0
   }
 
-  // Importar CSV — soporta MP, Visa, Mastercard, Canadá, Patagonia
-  async function importarCSV(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    e.target.value = ''
-    setImportando(true)
-    setImportMsg(null)
+  // ── Parsear texto de PDF (formato Banco Patagonia y genérico) ──
+  function parsearTextoPDF(fullText) {
+    const catOtros = categories?.find(c => c.name?.toLowerCase().includes('otro'))
+    const cfg = BANCO_CFG[importBanco] || BANCO_CFG.patagonia
+    const cuentaAcc = accounts.find(cfg.buscarCuenta) || accounts[0]
+    const cardObj = cfg.esCard ? cards?.find(c => c.name.toLowerCase().includes(importBanco === 'visa' ? 'visa' : 'master')) : null
 
-    const text = await file.text()
+    const txns = []
+    const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean)
+
+    // Patrón de fecha DD/MM/YYYY o DD/MM/YY al inicio de línea
+    const reFecha = /^(\d{2}\/\d{2}\/\d{2,4})/
+    // Patrón de monto al final: números con puntos/comas
+    const reMonto = /([\d.,]+)\s*$/
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      const fechaMatch = line.match(reFecha)
+      if (!fechaMatch) continue
+
+      const fecha = parsearFecha(fechaMatch[1])
+      // El resto de la línea después de la fecha
+      let resto = line.slice(fechaMatch[0].length).trim()
+
+      // Buscar monto al final
+      const montoMatch = resto.match(reMonto)
+      if (!montoMatch) continue
+
+      const monto = parsearMonto(montoMatch[1])
+      if (!monto || isNaN(monto) || monto < 1) continue
+
+      // Descripción = todo entre la fecha y el monto
+      let desc = resto.slice(0, resto.lastIndexOf(montoMatch[1])).trim()
+      // Limpiar signos, puntos extras
+      desc = desc.replace(/^[-–]/, '').replace(/\s{2,}/g, ' ').trim()
+      if (!desc) desc = `Movimiento ${cfg.nombre}`
+
+      // Determinar tipo: buscar indicadores de crédito en la línea o siguiente
+      const lineaLower = line.toLowerCase()
+      const tipo = (lineaLower.includes('acredit') || lineaLower.includes('crédito') ||
+                    lineaLower.includes('credit') || lineaLower.includes('haber') ||
+                    lineaLower.includes('transferencia recibida') || lineaLower.includes('depósito'))
+                    ? 'income' : 'expense'
+
+      txns.push({
+        type: tipo,
+        description: desc,
+        date: fecha,
+        amount_ars: monto,
+        amount_usd: 0,
+        category_id: catOtros?.id || null,
+        account_id: cardObj ? null : (cuentaAcc?.id || null),
+        card_id: cardObj?.id || null,
+      })
+    }
+    return txns
+  }
+
+  // ── Parsear CSV ──
+  function parsearCSV(text) {
+    const catOtros = categories?.find(c => c.name?.toLowerCase().includes('otro'))
+    const cfg = BANCO_CFG[importBanco] || BANCO_CFG.mp
+    const cuentaAcc = accounts.find(cfg.buscarCuenta) || accounts[0]
+    const cardObj = cfg.esCard ? cards?.find(c => c.name.toLowerCase().includes(importBanco === 'visa' ? 'visa' : 'master')) : null
+
     const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim())
-    if (lines.length < 2) { setImportMsg('Archivo vacío o inválido'); setImportando(false); return }
+    if (lines.length < 2) return []
 
     const sep = lines[0].includes(';') ? ';' : ','
     const headers = lines[0].split(sep).map(h => h.replace(/"/g, '').trim().toLowerCase())
 
-    // Mapeo de columnas según banco
     let iFecha = -1, iDesc = -1, iMonto = -1, iCredito = -1, iDebito = -1
-
-    if (importBanco === 'mp') {
-      iFecha  = headers.findIndex(h => h.includes('fecha'))
-      iDesc   = headers.findIndex(h => h.includes('descripci') || h.includes('detalle') || h.includes('concepto'))
-      iMonto  = headers.findIndex(h => h.includes('monto') || h.includes('importe'))
-    } else if (importBanco === 'visa' || importBanco === 'mastercard') {
-      iFecha  = headers.findIndex(h => h.includes('fecha'))
-      iDesc   = headers.findIndex(h => h.includes('establecimiento') || h.includes('comercio') || h.includes('descripci') || h.includes('detalle'))
-      iMonto  = headers.findIndex(h => h.includes('importe') || h.includes('monto') || h.includes('pesos'))
-    } else if (importBanco === 'canada') {
-      iFecha  = headers.findIndex(h => h.includes('fecha'))
-      iDesc   = headers.findIndex(h => h.includes('descripci') || h.includes('concepto') || h.includes('detalle'))
-      iCredito = headers.findIndex(h => h.includes('cr') || h.includes('crédito') || h.includes('haber'))
-      iDebito  = headers.findIndex(h => h.includes('db') || h.includes('débito') || h.includes('debe'))
-      iMonto  = headers.findIndex(h => h.includes('importe') || h.includes('monto'))
-    } else if (importBanco === 'patagonia') {
-      iFecha  = headers.findIndex(h => h.includes('fecha'))
-      iDesc   = headers.findIndex(h => h.includes('descripci') || h.includes('concepto') || h.includes('movimiento'))
-      iCredito = headers.findIndex(h => h.includes('crédito') || h.includes('haber'))
-      iDebito  = headers.findIndex(h => h.includes('débito') || h.includes('debe'))
-      iMonto  = headers.findIndex(h => h.includes('importe') || h.includes('monto'))
-    }
-
-    // Fallback genérico si no encontró por banco
-    if (iFecha === -1) iFecha = headers.findIndex(h => h.includes('fecha'))
-    if (iDesc  === -1) iDesc  = headers.findIndex(h => h.includes('descripci') || h.includes('detalle') || h.includes('concepto'))
-    if (iMonto === -1) iMonto = headers.findIndex(h => h.includes('monto') || h.includes('importe') || h.includes('total'))
-
-    if (iMonto === -1 && iCredito === -1) {
-      setImportMsg('No se encontró columna de monto. Verificá el formato del archivo.')
-      setImportando(false); return
-    }
-
-    const bancoConfig = {
-      mp:         { nombre: 'Mercado Pago', buscar: a => a.name.toLowerCase().includes('mercado') },
-      visa:       { nombre: 'Visa',         buscar: a => a.name.toLowerCase().includes('visa') },
-      mastercard: { nombre: 'Mastercard',   buscar: a => a.name.toLowerCase().includes('master') },
-      canada:     { nombre: 'Canadá',       buscar: a => a.name.toLowerCase().includes('canad') },
-      patagonia:  { nombre: 'Patagonia',    buscar: a => a.name.toLowerCase().includes('patagonia') },
-    }
-    const cfg = bancoConfig[importBanco] || bancoConfig.mp
-    const cuenta = accounts.find(cfg.buscar) || accounts[0]
-    const catOtros = categories?.find(c => c.name?.toLowerCase().includes('otro'))
+    iFecha   = headers.findIndex(h => h.includes('fecha'))
+    iDesc    = headers.findIndex(h => ['descripci','detalle','concepto','establecimiento','comercio','movimiento'].some(k => h.includes(k)))
+    iCredito = headers.findIndex(h => ['crédito','credito','haber','cr '].some(k => h.includes(k)))
+    iDebito  = headers.findIndex(h => ['débito','debito','debe','db '].some(k => h.includes(k)))
+    iMonto   = headers.findIndex(h => ['monto','importe','total','pesos','amount'].some(k => h.includes(k)))
 
     const txns = []
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(sep).map(c => c.replace(/"/g, '').trim())
       if (cols.length < 2) continue
 
-      let monto = 0
-      let tipo = 'expense'
-
+      let monto = 0, tipo = 'expense'
       if (iCredito >= 0 && iDebito >= 0) {
         const cr = parsearMonto(cols[iCredito])
         const db = parsearMonto(cols[iDebito])
         if (cr > 0) { monto = cr; tipo = 'income' }
-        else if (db > 0) { monto = db; tipo = 'expense' }
+        else if (db > 0) { monto = db }
         else continue
       } else if (iMonto >= 0) {
         const raw = parsearMonto(cols[iMonto])
         monto = Math.abs(raw)
         tipo = raw < 0 ? 'expense' : 'income'
       }
-
       if (!monto || isNaN(monto)) continue
 
-      const desc = iDesc >= 0 ? cols[iDesc] : `Movimiento ${cfg.nombre} ${i}`
+      const desc = iDesc >= 0 ? cols[iDesc] : `Movimiento ${i}`
       const fecha = parsearFecha(iFecha >= 0 ? cols[iFecha] : cols[0])
 
-      txns.push({ type: tipo, description: desc, date: fecha, amount_ars: monto, amount_usd: 0, category_id: catOtros?.id || null, account_id: cuenta?.id || null, card_id: null })
+      txns.push({
+        type: tipo, description: desc, date: fecha,
+        amount_ars: monto, amount_usd: 0,
+        category_id: catOtros?.id || null,
+        account_id: cardObj ? null : (cuentaAcc?.id || null),
+        card_id: cardObj?.id || null,
+      })
     }
+    return txns
+  }
 
-    if (txns.length === 0) { setImportMsg('No se encontraron movimientos válidos'); setImportando(false); return }
+  // ── Manejador principal del input de archivo ──
+  async function onArchivoSeleccionado(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    e.target.value = ''
+    setImportando(true)
+    setImportMsg(null)
+    setPreview(null)
 
-    const { error } = await supabase.from('transactions').insert(txns)
-    if (error) setImportMsg(`Error: ${error.message}`)
-    else setImportMsg(`✅ ${txns.length} movimientos de ${cfg.nombre} importados`)
+    try {
+      let txns = []
+
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        // ── PDF ──
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        let fullText = ''
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p)
+          const content = await page.getTextContent()
+          // Reconstruir líneas agrupando por Y aproximado
+          const items = content.items
+          const lineMap = {}
+          items.forEach(item => {
+            const y = Math.round(item.transform[5])
+            if (!lineMap[y]) lineMap[y] = []
+            lineMap[y].push(item.str)
+          })
+          const sortedYs = Object.keys(lineMap).map(Number).sort((a,b) => b - a)
+          sortedYs.forEach(y => { fullText += lineMap[y].join(' ') + '\n' })
+        }
+        txns = parsearTextoPDF(fullText)
+      } else {
+        // ── CSV ──
+        const text = await file.text()
+        txns = parsearCSV(text)
+      }
+
+      if (txns.length === 0) {
+        setImportMsg('No se encontraron movimientos válidos en el archivo.')
+      } else {
+        setPreview({ txns, fileName: file.name })
+      }
+    } catch (err) {
+      setImportMsg(`Error al leer el archivo: ${err.message}`)
+    }
     setImportando(false)
-    cargarTxns()
+  }
+
+  async function confirmarImport() {
+    if (!preview?.txns?.length) return
+    setImportando(true)
+    const { error } = await supabase.from('transactions').insert(preview.txns)
+    if (error) {
+      setImportMsg(`Error: ${error.message}`)
+    } else {
+      setImportMsg(`✅ ${preview.txns.length} movimientos importados correctamente`)
+      setPreview(null)
+      cargarTxns()
+    }
+    setImportando(false)
   }
 
   if (loading) return <p className="text-center text-gray-400 mt-20">Cargando...</p>
@@ -339,10 +426,10 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
           )
         })()}
 
-        {/* Importar MP */}
-        <button onClick={() => setModalImport(true)}
+        {/* Importar extracto */}
+        <button onClick={() => { setModalImport(true); setPreview(null); setImportMsg(null) }}
           className="w-full mb-4 flex items-center justify-center gap-2 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-600 font-medium hover:bg-blue-100">
-          <Upload size={15} /> Importar movimientos de Mercado Pago
+          <Upload size={15} /> Importar extracto bancario (PDF o CSV)
         </button>
 
         {/* Cuentas */}
@@ -433,42 +520,112 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
         </div>
       )}
 
-      {/* Modal importar CSV */}
+      {/* Modal importar PDF/CSV */}
       {modalImport && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setModalImport(false)}>
-          <div className="bg-white w-full max-w-md rounded-t-2xl p-5 pb-8" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => { setModalImport(false); setPreview(null); setImportMsg(null) }}>
+          <div className="bg-white w-full max-w-md rounded-t-2xl p-5 pb-8 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Importar {
-                { mp: 'Mercado Pago', visa: 'Visa', mastercard: 'Mastercard', canada: 'Canadá', patagonia: 'Patagonia' }[importBanco]
-              }</h2>
-              <button onClick={() => setModalImport(false)}><X size={20} className="text-gray-400" /></button>
+              <h2 className="text-lg font-bold text-gray-800">
+                {preview ? `Vista previa — ${preview.txns.length} movimientos` : 'Importar extracto bancario'}
+              </h2>
+              <button onClick={() => { setModalImport(false); setPreview(null); setImportMsg(null) }}>
+                <X size={20} className="text-gray-400" />
+              </button>
             </div>
-            <div className="mb-4">
-              <p className="text-xs text-gray-500 font-medium mb-2">¿De qué banco es el archivo?</p>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'mp', label: '🟦 Mercado Pago' },
-                  { id: 'visa', label: '💳 Visa' },
-                  { id: 'mastercard', label: '💳 Mastercard' },
-                  { id: 'canada', label: '🏦 Canadá' },
-                  { id: 'patagonia', label: '🏦 Patagonia' },
-                ].map(b => (
-                  <button key={b.id} onClick={() => setImportBanco(b.id)}
-                    className={`py-2 px-2 rounded-xl text-xs font-medium border transition-colors ${importBanco === b.id ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200'}`}>
-                    {b.label}
+
+            {!preview ? (
+              <>
+                {/* Selector de banco */}
+                <div className="mb-4">
+                  <p className="text-xs text-gray-500 font-medium mb-2">¿De qué banco es el archivo?</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'patagonia',  label: '🏦 Patagonia' },
+                      { id: 'mp',         label: '🟦 Mercado Pago' },
+                      { id: 'visa',       label: '💳 Visa' },
+                      { id: 'mastercard', label: '💳 Mastercard' },
+                      { id: 'canada',     label: '🍁 Canadá' },
+                    ].map(b => (
+                      <button key={b.id} onClick={() => setImportBanco(b.id)}
+                        className={`py-2 px-2 rounded-xl text-xs font-medium border transition-colors ${importBanco === b.id ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200'}`}>
+                        {b.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Drop zone PDF/CSV */}
+                <label className={`w-full flex flex-col items-center justify-center gap-3 py-10 border-2 border-dashed border-gray-200 rounded-2xl cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition-colors ${importando ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {importando ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-gray-500">Leyendo archivo...</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-3">
+                        <div className="flex items-center gap-1.5 bg-red-50 text-red-500 px-3 py-1.5 rounded-lg text-xs font-semibold">
+                          <FileText size={14} /> PDF
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-lg text-xs font-semibold">
+                          <FileText size={14} /> CSV
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500 font-medium">Tocar para seleccionar el extracto</p>
+                      <p className="text-xs text-gray-400">El banco te lo da en PDF o CSV</p>
+                    </>
+                  )}
+                  <input type="file" accept=".csv,.pdf" className="hidden" onChange={onArchivoSeleccionado} />
+                </label>
+
+                {importMsg && (
+                  <p className={`mt-3 text-sm px-3 py-2 rounded-xl ${importMsg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                    {importMsg}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Vista previa de transacciones parseadas */}
+                <div className="flex items-center gap-2 mb-3 text-xs text-gray-400">
+                  <Eye size={13} />
+                  <span>Revisá antes de importar. Podés cancelar si algo no cuadra.</span>
+                </div>
+
+                <div className="space-y-1.5 max-h-[50vh] overflow-y-auto mb-4 pr-1">
+                  {preview.txns.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+                      <span className={`text-xs font-bold w-3 ${t.type === 'income' ? 'text-green-500' : 'text-red-400'}`}>
+                        {t.type === 'income' ? '+' : '-'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-700 truncate">{t.description}</p>
+                        <p className="text-xs text-gray-400">{t.date}</p>
+                      </div>
+                      <p className="text-xs font-semibold text-gray-700 shrink-0 tabular-nums">
+                        {fmtARS(t.amount_ars)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {importMsg && (
+                  <p className={`mb-3 text-sm px-3 py-2 rounded-xl ${importMsg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                    {importMsg}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button onClick={() => { setPreview(null); setImportMsg(null) }}
+                    className="flex-1 py-3 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium">
+                    ← Volver
                   </button>
-                ))}
-              </div>
-            </div>
-            <label className={`w-full flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition-colors ${importando ? 'opacity-50 pointer-events-none' : ''}`}>
-              <Upload size={24} className="text-gray-400" />
-              <p className="text-sm text-gray-500 font-medium">{importando ? 'Importando...' : 'Tocar para seleccionar el archivo CSV'}</p>
-              <input type="file" accept=".csv" className="hidden" onChange={importarCSV} />
-            </label>
-            {importMsg && (
-              <p className={`mt-3 text-sm px-3 py-2 rounded-xl ${importMsg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
-                {importMsg}
-              </p>
+                  <button onClick={confirmarImport} disabled={importando}
+                    className="flex-1 py-3 rounded-xl bg-brand-600 text-white text-sm font-semibold disabled:opacity-50">
+                    {importando ? 'Importando...' : `Importar ${preview.txns.length} movimientos`}
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
