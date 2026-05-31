@@ -38,36 +38,76 @@ async function extraerTxnsDeArchivo(file) {
       Object.keys(lineMap).map(Number).sort((a,b) => b-a)
         .forEach(y => { fullText += lineMap[y].join(' ') + '\n' })
     }
-    return { txns: parsearTextoPDF(fullText), debug: fullText.slice(0, 2000) }
+    return { txns: parsearTextoPDF(fullText), debug: fullText.slice(0, 6000) }
   } else {
     const text = await file.text()
-    return { txns: parsearCSV(text), debug: text.slice(0, 2000) }
+    return { txns: parsearCSV(text), debug: text.slice(0, 6000) }
   }
+}
+
+function inferirAnio(texto) {
+  // Buscar año en el texto del PDF (ej: "MAYO 2026", "05/2026", "2026")
+  const m = texto.match(/20(2[4-9]|3\d)/)
+  return m ? parseInt(m[0]) : new Date().getFullYear()
 }
 
 function parsearTextoPDF(fullText) {
   const txns = []
+  const anio = inferirAnio(fullText)
   const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean)
-  const reFecha = /(\d{2}\/\d{2}\/\d{2,4})/
-  const reMonto = /([\d.]+,\d{2})\s*$/
+
+  // Patrones de fecha: DD/MM/YYYY, DD/MM/YY, o solo DD/MM (Patagonia Visa)
+  const reFechaLarga = /(\d{2}\/\d{2}\/\d{2,4})/
+  const reFechaCorta = /^(\d{2}\/\d{2})\b/    // DD/MM al inicio de línea
+  // Monto al final: puede ser 1.234,56 o 1234,56 o -1.234,56
+  const reMonto = /(-?[\d.]+,\d{2})\s*$/
 
   for (const line of lines) {
-    const fechaMatch = line.match(reFecha)
-    if (!fechaMatch) continue
-    const fecha = parsearFecha(fechaMatch[1])
-    if (!fecha) continue
-    const resto = line.slice(line.indexOf(fechaMatch[1]) + fechaMatch[1].length).trim()
+    // Ignorar líneas de totales/encabezados
+    const lineL = line.toLowerCase()
+    if (lineL.includes('total') && !lineL.match(/\d{2}\/\d{2}/)) continue
+    if (lineL.includes('saldo') && !lineL.match(/\d{2}\/\d{2}/)) continue
+    if (lineL.includes('pagina') || lineL.includes('página')) continue
+
+    // Intentar fecha larga primero, luego corta
+    let fechaStr = null
+    let restoDesde = 0
+    const mLarga = line.match(reFechaLarga)
+    const mCorta = line.match(reFechaCorta)
+
+    if (mLarga) {
+      fechaStr = parsearFecha(mLarga[1])
+      restoDesde = line.indexOf(mLarga[1]) + mLarga[1].length
+    } else if (mCorta) {
+      // DD/MM sin año → usar año inferido
+      const [dd, mm] = mCorta[1].split('/')
+      fechaStr = `${anio}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`
+      restoDesde = mCorta[1].length
+    }
+
+    if (!fechaStr) continue
+
+    const resto = line.slice(restoDesde).trim()
     const montoMatch = resto.match(reMonto)
     if (!montoMatch) continue
-    const monto = parsearMonto(montoMatch[1])
+
+    const montoRaw = parsearMonto(montoMatch[1])
+    const monto = Math.abs(montoRaw)
     if (!monto || monto < 1) continue
-    let desc = resto.slice(0, resto.lastIndexOf(montoMatch[1])).trim().replace(/^[-–]/, '').trim()
+
+    let desc = resto.slice(0, resto.lastIndexOf(montoMatch[1])).trim()
+    // Limpiar cuotas (ej: "01/06" al final de la descripción)
+    desc = desc.replace(/\s+\d{2}\/\d{2}\s*$/, '').trim()
     if (!desc) desc = 'Movimiento'
-    const lineL = line.toLowerCase()
-    const tipo = (lineL.includes('acredit') || lineL.includes('haber') ||
-      lineL.includes('transf recib') || lineL.includes('depósito') ||
-      lineL.includes('credito')) ? 'income' : 'expense'
-    txns.push({ date: fecha, description: desc, amount_ars: monto, type: tipo })
+
+    // Tipo: crédito si el monto es negativo en el PDF o si hay palabras clave
+    const tipo = (montoRaw < 0 ||
+      lineL.includes('acredit') || lineL.includes('haber') ||
+      lineL.includes('pago tarjeta') || lineL.includes('pago recibido') ||
+      lineL.includes('depósito') || lineL.includes('deposito') ||
+      lineL.includes('transf. recib')) ? 'income' : 'expense'
+
+    txns.push({ date: fechaStr, description: desc, amount_ars: monto, type: tipo })
   }
   return txns
 }
