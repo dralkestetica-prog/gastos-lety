@@ -38,10 +38,10 @@ async function extraerTxnsDeArchivo(file) {
       Object.keys(lineMap).map(Number).sort((a,b) => b-a)
         .forEach(y => { fullText += lineMap[y].join(' ') + '\n' })
     }
-    return parsearTextoPDF(fullText)
+    return { txns: parsearTextoPDF(fullText), debug: fullText.slice(0, 2000) }
   } else {
     const text = await file.text()
-    return parsearCSV(text)
+    return { txns: parsearCSV(text), debug: text.slice(0, 2000) }
   }
 }
 
@@ -158,6 +158,7 @@ export default function ConciliacionModal({ onClose, accounts, categories, cards
   const [banco, setBanco] = useState('patagonia')
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(null)
+  const [rawText, setRawText] = useState(null)
 
   // Resultado del análisis
   const [matched, setMatched]         = useState([])
@@ -177,12 +178,14 @@ export default function ConciliacionModal({ onClose, accounts, categories, cards
 
     try {
       // 1. Parsear archivo del banco
-      const bancoParsed = await extraerTxnsDeArchivo(file)
+      const { txns: bancoParsed, debug } = await extraerTxnsDeArchivo(file)
       if (bancoParsed.length === 0) {
-        setError('No se encontraron movimientos en el archivo.')
+        setRawText(debug)
+        setError('No se encontraron movimientos. Mostrando texto extraído del archivo para diagnóstico ↓')
         setCargando(false)
         return
       }
+      setRawText(null)
 
       // 2. Detectar período del extracto
       const fechas = bancoParsed.map(t => t.date).sort()
@@ -326,6 +329,12 @@ export default function ConciliacionModal({ onClose, accounts, categories, cards
             </label>
 
             {error && <p className="text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+            {rawText && (
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-xs font-semibold text-gray-500 mb-1">Texto extraído del PDF (primeras líneas):</p>
+                <pre className="text-xs text-gray-600 whitespace-pre-wrap break-all overflow-y-auto max-h-48">{rawText}</pre>
+              </div>
+            )}
           </div>
         )}
 
