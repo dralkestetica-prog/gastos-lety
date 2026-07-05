@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, X } from 'lucide-react'
 import { useConfirm } from '../hooks/useConfirm'
 import { SkeletonCard, SkeletonList } from '../components/Skeleton'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import ErrorState from '../components/ErrorState'
 
 const HOY = new Date()
 
@@ -18,6 +19,8 @@ export default function ResumenView() {
   const [datos, setDatos] = useState([])
   const [cuotas, setCuotas] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [refresh, setRefresh] = useState(0)
   const [modalCuota, setModalCuota] = useState(null)
   const [editMonto, setEditMonto] = useState('')
   const [savingCuota, setSavingCuota] = useState(false)
@@ -25,15 +28,26 @@ export default function ResumenView() {
 
   useEffect(() => {
     async function cargar() {
+      setError(false)
       // Traer todos los movimientos de los últimos 6 meses
       const desde = format(subMonths(HOY, 5), 'yyyy-MM-01')
       const hasta = format(new Date(HOY.getFullYear(), HOY.getMonth() + 1, 0), 'yyyy-MM-dd')
 
-      const { data } = await supabase
-        .from('transactions')
-        .select('type, amount_ars, date')
-        .gte('date', desde)
-        .lte('date', hasta)
+      let data
+      try {
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 9000)
+        )
+        const res = await Promise.race([
+          supabase.from('transactions').select('type, amount_ars, date').gte('date', desde).lte('date', hasta),
+          timeout,
+        ])
+        data = res.data
+      } catch {
+        setError(true)
+        setLoading(false)
+        return
+      }
 
       if (!data) { setLoading(false); return }
 
@@ -90,8 +104,9 @@ export default function ResumenView() {
 
       setLoading(false)
     }
+    setLoading(true)
     cargar()
-  }, [])
+  }, [refresh])
 
   async function guardarCuota() {
     if (!editMonto || !modalCuota) return
@@ -133,6 +148,12 @@ export default function ResumenView() {
         <SkeletonCard lines={4} />
         <SkeletonCard lines={3} />
       </div>
+    </div>
+  )
+
+  if (error) return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      <ErrorState mensaje="No se pudieron cargar las estadísticas." onReintentar={() => setRefresh(r => r + 1)} />
     </div>
   )
 

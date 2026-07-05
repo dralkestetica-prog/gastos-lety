@@ -9,11 +9,13 @@ import GraficoCategoria from '../components/GraficoCategoria'
 import Presupuesto from '../components/Presupuesto'
 import { SkeletonList, SkeletonSummaryCards } from '../components/Skeleton'
 import { useCountUp } from '../hooks/useCountUp'
+import ErrorState from '../components/ErrorState'
 
 export default function MesView({ categories, accounts, cards }) {
   const [mes, setMes] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   const [movs, setMovs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [modal, setModal] = useState(null)
   const [refresh, setRefresh] = useState(0)
   const [filtroMedio, setFiltroMedio] = useState('todos')
@@ -23,20 +25,32 @@ export default function MesView({ categories, accounts, cards }) {
 
   async function cargar() {
     setLoading(true)
+    setError(false)
     const desde = format(mes, 'yyyy-MM-01')
     const hasta = format(new Date(mes.getFullYear(), mes.getMonth() + 1, 0), 'yyyy-MM-dd')
 
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*, categories(name,icon), accounts!transactions_account_id_fkey(name), cards(name)')
-      .gte('date', desde)
-      .lte('date', hasta)
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    if (error) console.error(error)
-    else setMovs(data || [])
-    setLoading(false)
+    try {
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 9000)
+      )
+      const { data, error: err } = await Promise.race([
+        supabase
+          .from('transactions')
+          .select('*, categories(name,icon), accounts!transactions_account_id_fkey(name), cards(name)')
+          .gte('date', desde)
+          .lte('date', hasta)
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false }),
+        timeout,
+      ])
+      if (err) throw err
+      setMovs(data || [])
+    } catch {
+      setError(true)
+      setMovs([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { cargar() }, [mes, refresh])
@@ -239,6 +253,11 @@ export default function MesView({ categories, accounts, cards }) {
         {/* Lista */}
         {loading ? (
           <SkeletonList count={6} />
+        ) : error ? (
+          <ErrorState
+            mensaje="Supabase no responde. Puede ser un problema temporal del servidor."
+            onReintentar={cargar}
+          />
         ) : movsFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center mt-16 gap-3">
             <span className="text-5xl">🔍</span>

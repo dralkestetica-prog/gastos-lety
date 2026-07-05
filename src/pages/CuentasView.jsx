@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { fmtARS, fmtUSD } from '../lib/formato'
 import { RefreshCw, CheckCircle, ChevronRight, X, Upload, FileText, Eye, GitMerge } from 'lucide-react'
 import ConciliacionModal from '../components/ConciliacionModal'
+import ErrorState from '../components/ErrorState'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import * as pdfjsLib from 'pdfjs-dist'
@@ -18,6 +19,7 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
   const [dolar, setDolar] = useState(null)
   const [loadingDolar, setLoadingDolar] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [pagando, setPagando] = useState(null)
   const [cuentaDetalle, setCuentaDetalle] = useState(null) // cuenta seleccionada
   const [movsCuenta, setMovsCuenta] = useState([])
@@ -31,9 +33,22 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
   const [modalConciliar, setModalConciliar] = useState(false)
 
   async function cargarTxns() {
-    const { data: txns } = await supabase
-      .from('transactions')
-      .select('id, account_id, type, amount_ars, amount_usd, card_id, is_paid')
+    setError(false)
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 9000)
+    )
+    let txns
+    try {
+      const { data } = await Promise.race([
+        supabase.from('transactions').select('id, account_id, type, amount_ars, amount_usd, card_id, is_paid'),
+        timeout,
+      ])
+      txns = data
+    } catch {
+      setError(true)
+      setLoading(false)
+      return
+    }
     if (!txns) { setLoading(false); return }
 
     const bal = {}
@@ -329,6 +344,7 @@ export default function CuentasView({ accounts, cards, categories, darkMode, tog
   }
 
   if (loading) return <p className="text-center text-gray-400 mt-20">Cargando...</p>
+  if (error) return <ErrorState mensaje="No se pudieron cargar las cuentas." onReintentar={cargarTxns} />
 
   // Vista detalle de cuenta
   if (cuentaDetalle) {

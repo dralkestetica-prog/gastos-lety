@@ -4,6 +4,7 @@ import { fmtARS } from '../lib/formato'
 import { Plus, X, Check, Trash2 } from 'lucide-react'
 import { useConfirm } from '../hooks/useConfirm'
 import { format } from 'date-fns'
+import ErrorState from '../components/ErrorState'
 
 function getMesActual() { return format(new Date(), 'yyyy-MM') }
 const FORM_VACIO = { name: '', amount_ars: '', category_id: '', account_id: '', card_id: '', due_day: '', tipo: 'expense' }
@@ -12,6 +13,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   const [fijos, setFijos] = useState([])
   const [pagados, setPagados] = useState(new Set())
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [tab, setTab] = useState('expense') // 'expense' | 'income'
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(FORM_VACIO)
@@ -19,15 +21,27 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   const confirm = useConfirm()
 
   async function cargar() {
+    setError(false)
     const MES_ACTUAL = getMesActual()
-    const [{ data: fijosList }, { data: txPagadas }] = await Promise.all([
-      supabase.from('fixed_expenses').select('*, categories(name,icon)').eq('is_active', true).order('due_day'),
-      supabase.from('transactions').select('fixed_expense_id').eq('is_fixed', true)
-        .gte('date', MES_ACTUAL + '-01').lte('date', MES_ACTUAL + '-31').not('fixed_expense_id', 'is', null),
-    ])
-    setFijos(fijosList || [])
-    setPagados(new Set((txPagadas || []).map(t => t.fixed_expense_id)))
-    setLoading(false)
+    try {
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 9000)
+      )
+      const [{ data: fijosList }, { data: txPagadas }] = await Promise.race([
+        Promise.all([
+          supabase.from('fixed_expenses').select('*, categories(name,icon)').eq('is_active', true).order('due_day'),
+          supabase.from('transactions').select('fixed_expense_id').eq('is_fixed', true)
+            .gte('date', MES_ACTUAL + '-01').lte('date', MES_ACTUAL + '-31').not('fixed_expense_id', 'is', null),
+        ]),
+        timeout,
+      ])
+      setFijos(fijosList || [])
+      setPagados(new Set((txPagadas || []).map(t => t.fixed_expense_id)))
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const fijosFiltrados = fijos.filter(f => (f.type || 'expense') === tab)
@@ -112,6 +126,7 @@ export default function GastosFijosView({ categories, accounts, cards }) {
   const totalPagado = fijosFiltrados.filter(f => pagados.has(f.id)).reduce((s, f) => s + Number(f.amount_ars), 0)
 
   if (loading) return <p className="text-center text-gray-400 mt-20">Cargando...</p>
+  if (error) return <ErrorState mensaje="No se pudieron cargar los gastos fijos." onReintentar={cargar} />
 
   const selectedMedioId = form.card_id || form.account_id
   const esEdicion = modal && modal !== 'nuevo'
